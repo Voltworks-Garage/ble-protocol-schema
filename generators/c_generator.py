@@ -24,8 +24,14 @@ class CGenerator:
         self.client_messages = schema['messages']['client']
         self.types = schema['types']
 
-    def get_c_type(self, type_name: str) -> str:
-        """Convert schema type to C type"""
+    def get_c_type(self, type_name: str, for_struct_decl: bool = False, max_string_length: int = 64) -> str:
+        """Convert schema type to C type
+
+        Args:
+            type_name: The schema type name
+            for_struct_decl: If True, returns type suitable for struct field declaration
+            max_string_length: Maximum string length for string types
+        """
         type_map = {
             'uint8': 'uint8_t',
             'int8': 'int8_t',
@@ -36,13 +42,40 @@ class CGenerator:
             'uint64': 'uint64_t',
             'int64': 'int64_t',
         }
+        if type_name == 'string':
+            # For struct declarations, we need the array size in the field declaration
+            return 'char' if for_struct_decl else 'const char*'
         return type_map.get(type_name, type_name)
 
-    def calculate_struct_size(self, fields: Dict[str, str]) -> int:
+    def is_variable_size(self, type_name: str) -> bool:
+        """Check if a type has variable size"""
+        return self.types.get(type_name, {}).get('size') == 'variable'
+
+    def get_field_type_name(self, field_value) -> str:
+        """Extract type name from field value (handles both string and dict formats)"""
+        if isinstance(field_value, dict):
+            return field_value.get('type', field_value)
+        return field_value
+
+    def get_field_max_length(self, field_value, default: int = 64) -> int:
+        """Get max_length for a string field"""
+        if isinstance(field_value, dict):
+            return field_value.get('max_length', default)
+        return default
+
+    def get_field_size(self, field_value, max_string_length: int = 64) -> int:
+        """Get size of a field in bytes"""
+        field_type = self.get_field_type_name(field_value)
+        if self.is_variable_size(field_type):
+            # For null-terminated strings, use max length from field or default
+            return self.get_field_max_length(field_value, max_string_length)
+        return self.types[field_type]['size']
+
+    def calculate_struct_size(self, fields: Dict, max_string_length: int = 64) -> int:
         """Calculate total size of message struct in bytes"""
         total = 0
-        for field_type in fields.values():
-            total += self.types[field_type]['size']
+        for field_value in fields.values():
+            total += self.get_field_size(field_value, max_string_length)
         return total
 
     def generate_header(self) -> str:
@@ -101,9 +134,13 @@ class CGenerator:
             # Begin function - initializes internal buffer
             lines.append(f"void ble_encode_{msg_name}_begin(void);")
             # Setter functions for each field
-            for field_name, field_type in msg_info['fields'].items():
-                c_type = self.get_c_type(field_type)
-                lines.append(f"void ble_encode_{msg_name}_set_{field_name}({c_type} value);")
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
+                if self.is_variable_size(field_type):
+                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}(const char* value);")
+                else:
+                    c_type = self.get_c_type(field_type)
+                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}({c_type} value);")
             # Get frame function - returns frame struct
             lines.append(f"ble_frame_t ble_encode_{msg_name}_get_frame(void);")
             lines.append("")
@@ -121,9 +158,13 @@ class CGenerator:
         for msg_name, msg_info in self.client_messages.items():
             lines.append(f"// Get {msg_name} message fields")
             # Getter functions for each field
-            for field_name, field_type in msg_info['fields'].items():
-                c_type = self.get_c_type(field_type)
-                lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void);")
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
+                if self.is_variable_size(field_type):
+                    lines.append(f"const char* ble_decode_{msg_name}_get_{field_name}(void);")
+                else:
+                    c_type = self.get_c_type(field_type)
+                    lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void);")
             lines.append("")
 
         lines.append("#endif // BLE_PROTOCOL_H")
@@ -157,9 +198,14 @@ class CGenerator:
 
         for msg_name, msg_info in self.server_messages.items():
             lines.append(f"typedef struct {{")
-            for field_name, field_type in msg_info['fields'].items():
-                c_type = self.get_c_type(field_type)
-                lines.append(f"    {c_type} {field_name};")
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
+                if self.is_variable_size(field_type):
+                    field_size = self.get_field_size(field_value)
+                    lines.append(f"    char {field_name}[{field_size}];")
+                else:
+                    c_type = self.get_c_type(field_type, for_struct_decl=True)
+                    lines.append(f"    {c_type} {field_name};")
             lines.append(f"}} __attribute__((packed)) {msg_name}_t;")
             lines.append("")
 
@@ -171,9 +217,14 @@ class CGenerator:
 
         for msg_name, msg_info in self.client_messages.items():
             lines.append(f"typedef struct {{")
-            for field_name, field_type in msg_info['fields'].items():
-                c_type = self.get_c_type(field_type)
-                lines.append(f"    {c_type} {field_name};")
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
+                if self.is_variable_size(field_type):
+                    field_size = self.get_field_size(field_value)
+                    lines.append(f"    char {field_name}[{field_size}];")
+                else:
+                    c_type = self.get_c_type(field_type, for_struct_decl=True)
+                    lines.append(f"    {c_type} {field_name};")
             lines.append(f"}} __attribute__((packed)) {msg_name}_t;")
             lines.append("")
 
@@ -250,14 +301,28 @@ class CGenerator:
             lines.append("")
 
             # Setter functions for each field
-            for field_name, field_type in msg_info['fields'].items():
-                c_type = self.get_c_type(field_type)
-
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 lines.append(f"// Set {field_name} in {msg_name} message")
-                lines.append(f"void ble_encode_{msg_name}_set_{field_name}({c_type} value) {{")
-                lines.append(f"    {msg_name}_t *msg = ({msg_name}_t*)&{msg_name}_encode_buffer[3];")
-                lines.append(f"    msg->{field_name} = value;")
-                lines.append(f"}}")
+
+                if self.is_variable_size(field_type):
+                    # String setter
+                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}(const char* value) {{")
+                    lines.append(f"    {msg_name}_t *msg = ({msg_name}_t*)&{msg_name}_encode_buffer[3];")
+                    lines.append(f"    if (value != NULL) {{")
+                    lines.append(f"        strncpy(msg->{field_name}, value, sizeof(msg->{field_name}) - 1);")
+                    lines.append(f"        msg->{field_name}[sizeof(msg->{field_name}) - 1] = '\\0';")
+                    lines.append(f"    }} else {{")
+                    lines.append(f"        msg->{field_name}[0] = '\\0';")
+                    lines.append(f"    }}")
+                    lines.append(f"}}")
+                else:
+                    # Numeric setter
+                    c_type = self.get_c_type(field_type)
+                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}({c_type} value) {{")
+                    lines.append(f"    {msg_name}_t *msg = ({msg_name}_t*)&{msg_name}_encode_buffer[3];")
+                    lines.append(f"    msg->{field_name} = value;")
+                    lines.append(f"}}")
                 lines.append("")
 
             # Get frame function
@@ -380,14 +445,23 @@ class CGenerator:
 
         # Field getters for each message type
         for msg_name, msg_info in self.client_messages.items():
-            for field_name, field_type in msg_info['fields'].items():
-                c_type = self.get_c_type(field_type)
-
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 lines.append(f"// Get {field_name} from {msg_name} message")
-                lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void) {{")
-                lines.append(f"    if (!{msg_name}_available) return 0;")
-                lines.append(f"    return {msg_name}_decoded.{field_name};")
-                lines.append(f"}}")
+
+                if self.is_variable_size(field_type):
+                    # String getter
+                    lines.append(f"const char* ble_decode_{msg_name}_get_{field_name}(void) {{")
+                    lines.append(f"    if (!{msg_name}_available) return \"\";")
+                    lines.append(f"    return {msg_name}_decoded.{field_name};")
+                    lines.append(f"}}")
+                else:
+                    # Numeric getter
+                    c_type = self.get_c_type(field_type)
+                    lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void) {{")
+                    lines.append(f"    if (!{msg_name}_available) return 0;")
+                    lines.append(f"    return {msg_name}_decoded.{field_name};")
+                    lines.append(f"}}")
                 lines.append("")
 
         return '\n'.join(lines)

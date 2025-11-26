@@ -29,6 +29,7 @@ typedef struct {
 
 // Message IDs
 #define MSG_ID_HEARTBEAT          0x01
+#define MSG_ID_SERVER_MESSAGE     0x04
 #define MSG_ID_SENSOR_DATA        0x02
 #define MSG_ID_MOTOR_STATUS       0x03
 #define MSG_ID_CONFIG_ACK         0x11
@@ -44,6 +45,11 @@ void ble_encode_heartbeat_set_uptime_ms(uint32_t value);
 void ble_encode_heartbeat_set_battery_mv(uint16_t value);
 void ble_encode_heartbeat_set_status_flags(uint8_t value);
 ble_frame_t ble_encode_heartbeat_get_frame(void);
+
+// Encode and get server_message message
+void ble_encode_server_message_begin(void);
+void ble_encode_server_message_set_data(const char* value);
+ble_frame_t ble_encode_server_message_get_frame(void);
 
 // Encode and get sensor_data message
 void ble_encode_sensor_data_begin(void);

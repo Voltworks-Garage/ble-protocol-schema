@@ -33,8 +33,33 @@ class DartGenerator:
             'int32': 'int',
             'uint64': 'int',
             'int64': 'int',
+            'string': 'String',
         }
         return type_map.get(type_name, type_name)
+
+    def is_variable_size(self, type_name: str) -> bool:
+        """Check if a type has variable size"""
+        return self.types.get(type_name, {}).get('size') == 'variable'
+
+    def get_field_type_name(self, field_value) -> str:
+        """Extract type name from field value (handles both string and dict formats)"""
+        if isinstance(field_value, dict):
+            return field_value.get('type', field_value)
+        return field_value
+
+    def get_field_max_length(self, field_value, default: int = 64) -> int:
+        """Get max_length for a string field"""
+        if isinstance(field_value, dict):
+            return field_value.get('max_length', default)
+        return default
+
+    def get_field_size(self, field_value, max_string_length: int = 64) -> int:
+        """Get size of a field in bytes"""
+        field_type = self.get_field_type_name(field_value)
+        if self.is_variable_size(field_type):
+            # For null-terminated strings, use max length from field or default
+            return self.get_field_max_length(field_value, max_string_length)
+        return self.types[field_type]['size']
 
     def get_byte_data_method(self, type_name: str) -> Tuple[str, str]:
         """Get ByteData read/write method for a type"""
@@ -50,11 +75,11 @@ class DartGenerator:
         }
         return methods.get(type_name, ('getUint8', 'setUint8'))
 
-    def calculate_struct_size(self, fields: Dict[str, str]) -> int:
+    def calculate_struct_size(self, fields: Dict, max_string_length: int = 64) -> int:
         """Calculate total size of message in bytes"""
         total = 0
-        for field_type in fields.values():
-            total += self.types[field_type]['size']
+        for field_value in fields.values():
+            total += self.get_field_size(field_value, max_string_length)
         return total
 
     def to_camel_case(self, snake_str: str) -> str:
@@ -117,21 +142,27 @@ class DartGenerator:
             lines.append(f"class {class_name} {{")
 
             # Private fields
-            for field_name, field_type in msg_info['fields'].items():
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 dart_type = self.get_dart_type(field_type)
                 camel_name = self.to_camel_case(field_name)
-                lines.append(f"  {dart_type} _{camel_name} = 0;")
+                if self.is_variable_size(field_type):
+                    lines.append(f"  {dart_type} _{camel_name} = '';")
+                else:
+                    lines.append(f"  {dart_type} _{camel_name} = 0;")
             lines.append("")
 
             # Getters
-            for field_name, field_type in msg_info['fields'].items():
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 dart_type = self.get_dart_type(field_type)
                 camel_name = self.to_camel_case(field_name)
                 lines.append(f"  {dart_type} get {camel_name} => _{camel_name};")
             lines.append("")
 
             # Setters
-            for field_name, field_type in msg_info['fields'].items():
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 dart_type = self.get_dart_type(field_type)
                 camel_name = self.to_camel_case(field_name)
                 lines.append(f"  set {camel_name}({dart_type} value) {{")
@@ -155,17 +186,33 @@ class DartGenerator:
             lines.append("    int offset = 0;")
             lines.append("")
 
-            for field_name, field_type in msg_info['fields'].items():
-                read_method, write_method = self.get_byte_data_method(field_type)
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 camel_name = self.to_camel_case(field_name)
-                field_size = self.types[field_type]['size']
 
-                if field_size == 1:
-                    lines.append(f"    data.{write_method}(offset, _{camel_name});")
+                if self.is_variable_size(field_type):
+                    # String encoding - null-terminated
+                    field_size = self.get_field_size(field_value)
+                    lines.append(f"    // Encode string (null-terminated)")
+                    lines.append(f"    final stringBytes = _{camel_name}.codeUnits;")
+                    lines.append(f"    final bytesToCopy = stringBytes.length < {field_size} - 1 ? stringBytes.length : {field_size} - 1;")
+                    lines.append(f"    for (int i = 0; i < bytesToCopy; i++) {{")
+                    lines.append(f"      payload[offset + i] = stringBytes[i];")
+                    lines.append(f"    }}")
+                    lines.append(f"    payload[offset + bytesToCopy] = 0; // Null terminator")
+                    lines.append(f"    offset += {field_size};")
+                    lines.append("")
                 else:
-                    lines.append(f"    data.{write_method}(offset, _{camel_name}, Endian.little);")
-                lines.append(f"    offset += {field_size};")
-                lines.append("")
+                    # Numeric encoding
+                    read_method, write_method = self.get_byte_data_method(field_type)
+                    field_size = self.types[field_type]['size']
+
+                    if field_size == 1:
+                        lines.append(f"    data.{write_method}(offset, _{camel_name});")
+                    else:
+                        lines.append(f"    data.{write_method}(offset, _{camel_name}, Endian.little);")
+                    lines.append(f"    offset += {field_size};")
+                    lines.append("")
 
             # Create frame: [0xAA][Length][MsgID][Payload][Checksum]
             lines.append(f"    final frameSize = 3 + {msg_size} + 1;")
@@ -323,17 +370,34 @@ class DartGenerator:
             lines.append("    int offset = 0;")
             lines.append("")
 
-            for field_name, field_type in msg_info['fields'].items():
-                read_method, write_method = self.get_byte_data_method(field_type)
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 camel_name = self.to_camel_case(field_name)
-                field_size = self.types[field_type]['size']
 
-                if field_size == 1:
-                    lines.append(f"    msg._{camel_name} = data.{read_method}(offset);")
+                if self.is_variable_size(field_type):
+                    # String decoding - null-terminated
+                    field_size = self.get_field_size(field_value)
+                    lines.append(f"    // Decode string (null-terminated)")
+                    lines.append(f"    final stringBytes = <int>[];")
+                    lines.append(f"    for (int i = 0; i < {field_size}; i++) {{")
+                    lines.append(f"      final byte = _payloadBuffer[offset + i];")
+                    lines.append(f"      if (byte == 0) break; // Null terminator")
+                    lines.append(f"      stringBytes.add(byte);")
+                    lines.append(f"    }}")
+                    lines.append(f"    msg._{camel_name} = String.fromCharCodes(stringBytes);")
+                    lines.append(f"    offset += {field_size};")
+                    lines.append("")
                 else:
-                    lines.append(f"    msg._{camel_name} = data.{read_method}(offset, Endian.little);")
-                lines.append(f"    offset += {field_size};")
-                lines.append("")
+                    # Numeric decoding
+                    read_method, write_method = self.get_byte_data_method(field_type)
+                    field_size = self.types[field_type]['size']
+
+                    if field_size == 1:
+                        lines.append(f"    msg._{camel_name} = data.{read_method}(offset);")
+                    else:
+                        lines.append(f"    msg._{camel_name} = data.{read_method}(offset, Endian.little);")
+                    lines.append(f"    offset += {field_size};")
+                    lines.append("")
 
             lines.append("    return msg;")
             lines.append("  }")
@@ -366,14 +430,19 @@ class DartGenerator:
             lines.append(f"class {class_name} {{")
 
             # Private fields
-            for field_name, field_type in msg_info['fields'].items():
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 dart_type = self.get_dart_type(field_type)
                 camel_name = self.to_camel_case(field_name)
-                lines.append(f"  {dart_type} _{camel_name} = 0;")
+                if self.is_variable_size(field_type):
+                    lines.append(f"  {dart_type} _{camel_name} = '';")
+                else:
+                    lines.append(f"  {dart_type} _{camel_name} = 0;")
             lines.append("")
 
             # Getters (read-only for received messages)
-            for field_name, field_type in msg_info['fields'].items():
+            for field_name, field_value in msg_info['fields'].items():
+                field_type = self.get_field_type_name(field_value)
                 dart_type = self.get_dart_type(field_type)
                 camel_name = self.to_camel_case(field_name)
                 lines.append(f"  {dart_type} get {camel_name} => _{camel_name};")

@@ -20,6 +20,7 @@ const int bleSyncFirst = 0xAA;
 
 // Message IDs
 const int msgIdHeartbeat = 0x01;
+const int msgIdServerMessage = 0x04;
 const int msgIdSensorData = 0x02;
 const int msgIdMotorStatus = 0x03;
 const int msgIdConfigAck = 0x11;
@@ -81,11 +82,17 @@ class ConfigSet {
 
 /// Decoder for server messages with multi-frame reassembly support
 class BleDecoder {
-  final Uint8List _payloadBuffer = Uint8List(11);
+  final Uint8List _payloadBuffer = Uint8List(128);
   int _expectedSize = 0;
   int _bytesReceived = 0;
   int _msgId = 0;
   bool _valid = false;
+
+  Heartbeat? _heartbeat;
+  ServerMessage? _serverMessage;
+  SensorData? _sensorData;
+  MotorStatus? _motorStatus;
+  ConfigAck? _configAck;
 
   /// Decode a frame (supports multi-frame reassembly)
   /// Returns true when a complete message is received and validated
@@ -123,6 +130,9 @@ class BleDecoder {
         _payloadBuffer.setRange(0, _expectedSize, payloadData);
         _bytesReceived = _expectedSize;
         _valid = true;
+        
+        // Store decoded message in per-message buffer
+        _storeMessage();
         return true;
       } else {
         // Multi-frame message - copy partial payload
@@ -152,6 +162,9 @@ class BleDecoder {
         }
 
         _valid = true;
+        
+        // Store decoded message in per-message buffer
+        _storeMessage();
         return true;
       } else {
         // Continuation frame - copy payload
@@ -163,11 +176,31 @@ class BleDecoder {
     }
   }
 
-  /// Decode heartbeat message from last received frame
-  Heartbeat? decodeHeartbeat() {
-    if (!_valid) return null;
-    if (_msgId != 0x01) return null;
+  /// Store decoded message in per-message buffer
+  void _storeMessage() {
+    switch (_msgId) {
+      case 0x01:
+        _heartbeat = _decodeHeartbeatFromBuffer();
+        break;
+      case 0x04:
+        _serverMessage = _decodeServerMessageFromBuffer();
+        break;
+      case 0x02:
+        _sensorData = _decodeSensorDataFromBuffer();
+        break;
+      case 0x03:
+        _motorStatus = _decodeMotorStatusFromBuffer();
+        break;
+      case 0x11:
+        _configAck = _decodeConfigAckFromBuffer();
+        break;
+      default:
+        break;
+    }
+  }
 
+  /// Internal: Decode heartbeat from payload buffer
+  Heartbeat _decodeHeartbeatFromBuffer() {
     final msg = Heartbeat._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
@@ -184,11 +217,27 @@ class BleDecoder {
     return msg;
   }
 
-  /// Decode sensor_data message from last received frame
-  SensorData? decodeSensorData() {
-    if (!_valid) return null;
-    if (_msgId != 0x02) return null;
+  /// Internal: Decode server_message from payload buffer
+  ServerMessage _decodeServerMessageFromBuffer() {
+    final msg = ServerMessage._();
+    final data = ByteData.view(_payloadBuffer.buffer);
+    int offset = 0;
 
+    // Decode string (null-terminated)
+    final stringBytes = <int>[];
+    for (int i = 0; i < 128; i++) {
+      final byte = _payloadBuffer[offset + i];
+      if (byte == 0) break; // Null terminator
+      stringBytes.add(byte);
+    }
+    msg._data = String.fromCharCodes(stringBytes);
+    offset += 128;
+
+    return msg;
+  }
+
+  /// Internal: Decode sensor_data from payload buffer
+  SensorData _decodeSensorDataFromBuffer() {
     final msg = SensorData._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
@@ -208,11 +257,8 @@ class BleDecoder {
     return msg;
   }
 
-  /// Decode motor_status message from last received frame
-  MotorStatus? decodeMotorStatus() {
-    if (!_valid) return null;
-    if (_msgId != 0x03) return null;
-
+  /// Internal: Decode motor_status from payload buffer
+  MotorStatus _decodeMotorStatusFromBuffer() {
     final msg = MotorStatus._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
@@ -232,11 +278,8 @@ class BleDecoder {
     return msg;
   }
 
-  /// Decode config_ack message from last received frame
-  ConfigAck? decodeConfigAck() {
-    if (!_valid) return null;
-    if (_msgId != 0x11) return null;
-
+  /// Internal: Decode config_ack from payload buffer
+  ConfigAck _decodeConfigAckFromBuffer() {
     final msg = ConfigAck._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
@@ -248,6 +291,31 @@ class BleDecoder {
     offset += 1;
 
     return msg;
+  }
+
+  /// Get stored heartbeat message (returns null if no message available)
+  Heartbeat? getHeartbeat() {
+    return _heartbeat;
+  }
+
+  /// Get stored server_message message (returns null if no message available)
+  ServerMessage? getServerMessage() {
+    return _serverMessage;
+  }
+
+  /// Get stored sensor_data message (returns null if no message available)
+  SensorData? getSensorData() {
+    return _sensorData;
+  }
+
+  /// Get stored motor_status message (returns null if no message available)
+  MotorStatus? getMotorStatus() {
+    return _motorStatus;
+  }
+
+  /// Get stored config_ack message (returns null if no message available)
+  ConfigAck? getConfigAck() {
+    return _configAck;
   }
 
 }
@@ -272,6 +340,20 @@ class Heartbeat {
 
   @override
   String toString() => 'Heartbeat(uptime_ms: ${uptimeMs}, battery_mv: ${batteryMv}, status_flags: ${statusFlags})';
+}
+
+/// ServerMessage message - Server to Client
+class ServerMessage {
+  String _data = '';
+
+  String get data => _data;
+
+  ServerMessage._();
+
+  int get messageId => 0x04;
+
+  @override
+  String toString() => 'ServerMessage(data: ${data})';
 }
 
 /// SensorData message - Server to Client

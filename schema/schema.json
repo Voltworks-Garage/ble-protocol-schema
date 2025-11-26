@@ -40,6 +40,12 @@
           "status_flags": "uint8"
         }
       },
+      "server_message": {
+        "id": "0x04",
+        "fields": {
+          "data": {"type": "string", "max_length": 128}
+        }
+      },
       "sensor_data": {
         "id": "0x02",
         "fields": {
@@ -84,6 +90,7 @@
     "uint32": {"size": 4, "signed": false},
     "int32": {"size": 4, "signed": true},
     "uint64": {"size": 8, "signed": false},
-    "int64": {"size": 8, "signed": true}
+    "int64": {"size": 8, "signed": true},
+    "string": {"size": "variable", "signed": false}
   }
 }

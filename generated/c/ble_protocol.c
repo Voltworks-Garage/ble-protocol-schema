@@ -21,6 +21,10 @@ typedef struct {
 } __attribute__((packed)) heartbeat_t;
 
 typedef struct {
+    char data[128];
+} __attribute__((packed)) server_message_t;
+
+typedef struct {
     uint32_t timestamp_ms;
     int16_t temperature_c;
     uint8_t humidity_pct;
@@ -54,6 +58,8 @@ typedef struct {
 
 static uint8_t heartbeat_encode_buffer[11];
 static uint16_t heartbeat_encode_len;
+static uint8_t server_message_encode_buffer[132];
+static uint16_t server_message_encode_len;
 static uint8_t sensor_data_encode_buffer[15];
 static uint16_t sensor_data_encode_len;
 static uint8_t motor_status_encode_buffer[10];
@@ -130,6 +136,46 @@ ble_frame_t ble_encode_heartbeat_get_frame(void) {
     ble_frame_t frame = {
         .data = heartbeat_encode_buffer,
         .length = heartbeat_encode_len
+    };
+    return frame;
+}
+
+// Begin encoding server_message message
+void ble_encode_server_message_begin(void) {
+    const uint16_t payload_size = sizeof(server_message_t);
+    
+    // Frame: [0xAA][Length][MsgID][Payload][Checksum]
+    server_message_encode_buffer[0] = BLE_SYNC_FIRST;
+    server_message_encode_buffer[1] = payload_size;
+    server_message_encode_buffer[2] = 0x04;
+    
+    // Zero out payload area
+    memset(&server_message_encode_buffer[3], 0, payload_size);
+    
+    // Frame length includes header, payload, and checksum
+    server_message_encode_len = 3 + payload_size + 1;
+}
+
+// Set data in server_message message
+void ble_encode_server_message_set_data(const char* value) {
+    server_message_t *msg = (server_message_t*)&server_message_encode_buffer[3];
+    if (value != NULL) {
+        strncpy(msg->data, value, sizeof(msg->data) - 1);
+        msg->data[sizeof(msg->data) - 1] = '\0';
+    } else {
+        msg->data[0] = '\0';
+    }
+}
+
+// Get encoded server_message frame
+ble_frame_t ble_encode_server_message_get_frame(void) {
+    // Calculate checksum before returning frame
+    uint8_t payload_size = server_message_encode_buffer[1];
+    server_message_encode_buffer[3 + payload_size] = ble_calculate_checksum(&server_message_encode_buffer[3], payload_size);
+    
+    ble_frame_t frame = {
+        .data = server_message_encode_buffer,
+        .length = server_message_encode_len
     };
     return frame;
 }
