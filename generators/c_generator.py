@@ -101,6 +101,10 @@ class CGenerator:
         lines.append("#ifndef BLE_PROTOCOL_H")
         lines.append("#define BLE_PROTOCOL_H")
         lines.append("")
+        lines.append("#ifdef __cplusplus")
+        lines.append("extern \"C\" {")
+        lines.append("#endif")
+        lines.append("")
         lines.append("#include <stdint.h>")
         lines.append("#include <stdbool.h>")
         lines.append("")
@@ -167,6 +171,10 @@ class CGenerator:
                     lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void);")
             lines.append("")
 
+        lines.append("#ifdef __cplusplus")
+        lines.append("}")
+        lines.append("#endif")
+        lines.append("")
         lines.append("#endif // BLE_PROTOCOL_H")
 
         return '\n'.join(lines)

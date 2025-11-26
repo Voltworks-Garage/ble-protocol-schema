@@ -18,6 +18,10 @@
 #ifndef BLE_PROTOCOL_H
 #define BLE_PROTOCOL_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -83,5 +87,9 @@ bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len);
 // Get config_set message fields
 uint8_t ble_decode_config_set_get_param_id(void);
 uint32_t ble_decode_config_set_get_value(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // BLE_PROTOCOL_H
