@@ -61,8 +61,14 @@ static uint16_t motor_status_encode_len;
 static uint8_t config_ack_encode_buffer[6];
 static uint16_t config_ack_encode_len;
 
-static uint8_t config_set_decode_buffer[9];
-static bool config_set_decode_valid;
+static uint8_t decode_payload_buffer[5];
+static uint8_t decode_expected_size;
+static uint8_t decode_bytes_received;
+static uint8_t decode_msg_id;
+static bool decode_valid;
+
+static config_set_t config_set_decoded;
+static bool config_set_available;
 
 // ============================================================================
 // Private helper functions
@@ -279,44 +285,106 @@ ble_frame_t ble_encode_config_ack_get_frame(void) {
 // Client message decoding functions (messages server receives)
 // ============================================================================
 
-// Set received config_set frame for decoding
-bool ble_decode_config_set_set_frame(const uint8_t *frame, uint16_t frame_len) {
-    config_set_decode_valid = false;
+// Copy decoded payload to appropriate message buffer
+static void ble_decode_store_message(void) {
+    switch (decode_msg_id) {
+        case 0x10:
+            memcpy(&config_set_decoded, decode_payload_buffer, sizeof(config_set_t));
+            config_set_available = true;
+            break;
+        default:
+            break;
+    }
+}
+
+// Decode client message frame (supports multi-frame reassembly)
+// Returns true when complete message is received and validated
+bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len) {
+    if (frame == NULL || frame_len < 1) return false;
     
-    if (frame == NULL || frame_len < 5) return false;
-    
-    // Verify first frame with correct message ID
-    if (frame[0] != BLE_SYNC_FIRST) return false;
-    if (frame[2] != 0x10) return false;
-    
-    // Verify frame length
-    uint8_t payload_size = frame[1];
-    if (payload_size != 5) return false;
-    if (frame_len < 3 + payload_size + 1) return false;
-    
-    // Verify checksum (at end of frame)
-    uint8_t checksum = frame[3 + payload_size];
-    uint8_t calc_checksum = ble_calculate_checksum(&frame[3], payload_size);
-    if (checksum != calc_checksum) return false;
-    
-    // Copy to internal buffer
-    memcpy(config_set_decode_buffer, frame, frame_len);
-    config_set_decode_valid = true;
-    return true;
+    // Check if this is a first frame
+    if (frame[0] == BLE_SYNC_FIRST) {
+        // Reset state for new message
+        decode_valid = false;
+        decode_bytes_received = 0;
+        
+        // Verify minimum frame size for first frame
+        if (frame_len < 4) return false;
+        
+        // Extract header
+        decode_expected_size = frame[1];
+        decode_msg_id = frame[2];
+        
+        // Calculate payload bytes in this frame
+        uint16_t header_size = 3;
+        uint16_t payload_in_frame = frame_len - header_size;
+        
+        // Check if this frame has checksum (complete message)
+        bool has_checksum = (payload_in_frame == decode_expected_size + 1);
+        
+        if (has_checksum) {
+            // Single-frame message - verify checksum
+            uint8_t checksum = frame[3 + decode_expected_size];
+            uint8_t calc_checksum = ble_calculate_checksum(&frame[3], decode_expected_size);
+            if (checksum != calc_checksum) return false;
+            
+            // Copy payload to buffer
+            memcpy(decode_payload_buffer, &frame[3], decode_expected_size);
+            decode_bytes_received = decode_expected_size;
+            decode_valid = true;
+            
+            // Store in per-message buffer
+            ble_decode_store_message();
+            return true;
+        } else {
+            // Multi-frame message - copy partial payload
+            if (payload_in_frame > decode_expected_size) return false;
+            memcpy(decode_payload_buffer, &frame[3], payload_in_frame);
+            decode_bytes_received = payload_in_frame;
+            return false; // Need more frames
+        }
+    } else {
+        // Continuation frame (no sync byte, just payload)
+        if (decode_bytes_received == 0) return false; // No first frame received
+        
+        uint16_t remaining = decode_expected_size - decode_bytes_received;
+        bool has_checksum = (frame_len == remaining + 1);
+        
+        if (has_checksum) {
+            // Final frame - verify checksum
+            memcpy(&decode_payload_buffer[decode_bytes_received], frame, remaining);
+            decode_bytes_received += remaining;
+            
+            uint8_t checksum = frame[remaining];
+            uint8_t calc_checksum = ble_calculate_checksum(decode_payload_buffer, decode_expected_size);
+            if (checksum != calc_checksum) {
+                decode_bytes_received = 0; // Reset on checksum failure
+                return false;
+            }
+            
+            decode_valid = true;
+            
+            // Store in per-message buffer
+            ble_decode_store_message();
+            return true;
+        } else {
+            // Continuation frame - copy payload
+            if (frame_len > remaining) return false;
+            memcpy(&decode_payload_buffer[decode_bytes_received], frame, frame_len);
+            decode_bytes_received += frame_len;
+            return false; // Need more frames
+        }
+    }
 }
 
 // Get param_id from config_set message
 uint8_t ble_decode_config_set_get_param_id(void) {
-    if (!config_set_decode_valid) return 0;
-    
-    const config_set_t *msg = (const config_set_t*)&config_set_decode_buffer[3];
-    return msg->param_id;
+    if (!config_set_available) return 0;
+    return config_set_decoded.param_id;
 }
 
 // Get value from config_set message
 uint32_t ble_decode_config_set_get_value(void) {
-    if (!config_set_decode_valid) return 0;
-    
-    const config_set_t *msg = (const config_set_t*)&config_set_decode_buffer[3];
-    return msg->value;
+    if (!config_set_available) return 0;
+    return config_set_decoded.value;
 }

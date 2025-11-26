@@ -71,8 +71,10 @@ ble_frame_t ble_encode_config_ack_get_frame(void);
 // Client message decoding functions
 // ============================================================================
 
-// Decode config_set message
-bool ble_decode_config_set_set_frame(const uint8_t *frame, uint16_t frame_len);
+// Generic frame decoding
+bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len);
+
+// Get config_set message fields
 uint8_t ble_decode_config_set_get_param_id(void);
 uint32_t ble_decode_config_set_get_value(void);
 
