@@ -141,7 +141,7 @@ class CGenerator:
             for field_name, field_value in msg_info['fields'].items():
                 field_type = self.get_field_type_name(field_value)
                 if self.is_variable_size(field_type):
-                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}(const char* value);")
+                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}(const uint8_t* value);")
                 else:
                     c_type = self.get_c_type(field_type)
                     lines.append(f"void ble_encode_{msg_name}_set_{field_name}({c_type} value);")
@@ -165,7 +165,7 @@ class CGenerator:
             for field_name, field_value in msg_info['fields'].items():
                 field_type = self.get_field_type_name(field_value)
                 if self.is_variable_size(field_type):
-                    lines.append(f"const char* ble_decode_{msg_name}_get_{field_name}(void);")
+                    lines.append(f"const uint8_t* ble_decode_{msg_name}_get_{field_name}(void);")
                 else:
                     c_type = self.get_c_type(field_type)
                     lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void);")
@@ -315,10 +315,10 @@ class CGenerator:
 
                 if self.is_variable_size(field_type):
                     # String setter
-                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}(const char* value) {{")
+                    lines.append(f"void ble_encode_{msg_name}_set_{field_name}(const uint8_t* value) {{")
                     lines.append(f"    {msg_name}_t *msg = ({msg_name}_t*)&{msg_name}_encode_buffer[3];")
                     lines.append(f"    if (value != NULL) {{")
-                    lines.append(f"        strncpy(msg->{field_name}, value, sizeof(msg->{field_name}) - 1);")
+                    lines.append(f"        strncpy(msg->{field_name}, (const char*)value, sizeof(msg->{field_name}) - 1);")
                     lines.append(f"        msg->{field_name}[sizeof(msg->{field_name}) - 1] = '\\0';")
                     lines.append(f"    }} else {{")
                     lines.append(f"        msg->{field_name}[0] = '\\0';")
@@ -459,9 +459,9 @@ class CGenerator:
 
                 if self.is_variable_size(field_type):
                     # String getter
-                    lines.append(f"const char* ble_decode_{msg_name}_get_{field_name}(void) {{")
-                    lines.append(f"    if (!{msg_name}_available) return \"\";")
-                    lines.append(f"    return {msg_name}_decoded.{field_name};")
+                    lines.append(f"const uint8_t* ble_decode_{msg_name}_get_{field_name}(void) {{")
+                    lines.append(f"    if (!{msg_name}_available) return (const uint8_t*)\"\";")
+                    lines.append(f"    return (const uint8_t*){msg_name}_decoded.{field_name};")
                     lines.append(f"}}")
                 else:
                     # Numeric getter

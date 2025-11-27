@@ -157,10 +157,10 @@ void ble_encode_server_message_begin(void) {
 }
 
 // Set data in server_message message
-void ble_encode_server_message_set_data(const char* value) {
+void ble_encode_server_message_set_data(const uint8_t* value) {
     server_message_t *msg = (server_message_t*)&server_message_encode_buffer[3];
     if (value != NULL) {
-        strncpy(msg->data, value, sizeof(msg->data) - 1);
+        strncpy(msg->data, (const char*)value, sizeof(msg->data) - 1);
         msg->data[sizeof(msg->data) - 1] = '\0';
     } else {
         msg->data[0] = '\0';

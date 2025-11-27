@@ -52,7 +52,7 @@ ble_frame_t ble_encode_heartbeat_get_frame(void);
 
 // Encode and get server_message message
 void ble_encode_server_message_begin(void);
-void ble_encode_server_message_set_data(const char* value);
+void ble_encode_server_message_set_data(const uint8_t* value);
 ble_frame_t ble_encode_server_message_get_frame(void);
 
 // Encode and get sensor_data message
