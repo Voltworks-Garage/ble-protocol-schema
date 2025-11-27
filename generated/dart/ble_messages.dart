@@ -89,14 +89,25 @@ class BleDecoder {
   bool _valid = false;
 
   Heartbeat? _heartbeat;
+  int _heartbeatTimestampMs = 0;
+  bool _heartbeatUnread = false;
   ServerMessage? _serverMessage;
+  int _serverMessageTimestampMs = 0;
+  bool _serverMessageUnread = false;
   SensorData? _sensorData;
+  int _sensorDataTimestampMs = 0;
+  bool _sensorDataUnread = false;
   MotorStatus? _motorStatus;
+  int _motorStatusTimestampMs = 0;
+  bool _motorStatusUnread = false;
   ConfigAck? _configAck;
+  int _configAckTimestampMs = 0;
+  bool _configAckUnread = false;
 
   /// Decode a frame (supports multi-frame reassembly)
   /// Returns true when a complete message is received and validated
-  bool decodeFrame(Uint8List frame) {
+  /// [timeMs] Current time in milliseconds for timestamping received messages
+  bool decodeFrame(Uint8List frame, int timeMs) {
     if (frame.isEmpty) return false;
 
     // Check if this is a first frame
@@ -132,7 +143,7 @@ class BleDecoder {
         _valid = true;
         
         // Store decoded message in per-message buffer
-        _storeMessage();
+        _storeMessage(timeMs);
         return true;
       } else {
         // Multi-frame message - copy partial payload
@@ -164,7 +175,7 @@ class BleDecoder {
         _valid = true;
         
         // Store decoded message in per-message buffer
-        _storeMessage();
+        _storeMessage(timeMs);
         return true;
       } else {
         // Continuation frame - copy payload
@@ -177,22 +188,32 @@ class BleDecoder {
   }
 
   /// Store decoded message in per-message buffer
-  void _storeMessage() {
+  void _storeMessage(int timestampMs) {
     switch (_msgId) {
       case 0x01:
         _heartbeat = _decodeHeartbeatFromBuffer();
+        _heartbeatTimestampMs = timestampMs;
+        _heartbeatUnread = true;
         break;
       case 0x04:
         _serverMessage = _decodeServerMessageFromBuffer();
+        _serverMessageTimestampMs = timestampMs;
+        _serverMessageUnread = true;
         break;
       case 0x02:
         _sensorData = _decodeSensorDataFromBuffer();
+        _sensorDataTimestampMs = timestampMs;
+        _sensorDataUnread = true;
         break;
       case 0x03:
         _motorStatus = _decodeMotorStatusFromBuffer();
+        _motorStatusTimestampMs = timestampMs;
+        _motorStatusUnread = true;
         break;
       case 0x11:
         _configAck = _decodeConfigAckFromBuffer();
+        _configAckTimestampMs = timestampMs;
+        _configAckUnread = true;
         break;
       default:
         break;
@@ -295,27 +316,102 @@ class BleDecoder {
 
   /// Get stored heartbeat message (returns null if no message available)
   Heartbeat? getHeartbeat() {
+    if (_heartbeat != null) {
+      _heartbeatUnread = false;
+    }
     return _heartbeat;
   }
 
   /// Get stored server_message message (returns null if no message available)
   ServerMessage? getServerMessage() {
+    if (_serverMessage != null) {
+      _serverMessageUnread = false;
+    }
     return _serverMessage;
   }
 
   /// Get stored sensor_data message (returns null if no message available)
   SensorData? getSensorData() {
+    if (_sensorData != null) {
+      _sensorDataUnread = false;
+    }
     return _sensorData;
   }
 
   /// Get stored motor_status message (returns null if no message available)
   MotorStatus? getMotorStatus() {
+    if (_motorStatus != null) {
+      _motorStatusUnread = false;
+    }
     return _motorStatus;
   }
 
   /// Get stored config_ack message (returns null if no message available)
   ConfigAck? getConfigAck() {
+    if (_configAck != null) {
+      _configAckUnread = false;
+    }
     return _configAck;
+  }
+
+  /// Check if heartbeat message is unread
+  bool heartbeatCheckIsUnread() {
+    return _heartbeat != null && _heartbeatUnread;
+  }
+
+  /// Check if heartbeat data is stale (max age: 5000ms)
+  bool heartbeatCheckDataIsStale(int timeMs) {
+    if (_heartbeat == null) return true;
+    final ageMs = timeMs - _heartbeatTimestampMs;
+    return ageMs > 5000;
+  }
+
+  /// Check if server_message message is unread
+  bool serverMessageCheckIsUnread() {
+    return _serverMessage != null && _serverMessageUnread;
+  }
+
+  /// Check if server_message data is stale (max age: 1000ms)
+  bool serverMessageCheckDataIsStale(int timeMs) {
+    if (_serverMessage == null) return true;
+    final ageMs = timeMs - _serverMessageTimestampMs;
+    return ageMs > 1000;
+  }
+
+  /// Check if sensor_data message is unread
+  bool sensorDataCheckIsUnread() {
+    return _sensorData != null && _sensorDataUnread;
+  }
+
+  /// Check if sensor_data data is stale (max age: 2000ms)
+  bool sensorDataCheckDataIsStale(int timeMs) {
+    if (_sensorData == null) return true;
+    final ageMs = timeMs - _sensorDataTimestampMs;
+    return ageMs > 2000;
+  }
+
+  /// Check if motor_status message is unread
+  bool motorStatusCheckIsUnread() {
+    return _motorStatus != null && _motorStatusUnread;
+  }
+
+  /// Check if motor_status data is stale (max age: 1000ms)
+  bool motorStatusCheckDataIsStale(int timeMs) {
+    if (_motorStatus == null) return true;
+    final ageMs = timeMs - _motorStatusTimestampMs;
+    return ageMs > 1000;
+  }
+
+  /// Check if config_ack message is unread
+  bool configAckCheckIsUnread() {
+    return _configAck != null && _configAckUnread;
+  }
+
+  /// Check if config_ack data is stale (max age: 1000ms)
+  bool configAckCheckDataIsStale(int timeMs) {
+    if (_configAck == null) return true;
+    final ageMs = timeMs - _configAckTimestampMs;
+    return ageMs > 1000;
   }
 
 }

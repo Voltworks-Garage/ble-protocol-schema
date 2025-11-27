@@ -75,6 +75,8 @@ static bool decode_valid;
 
 static config_set_t config_set_decoded;
 static bool config_set_available;
+static uint32_t config_set_timestamp_ms;
+static bool config_set_unread;
 
 // ============================================================================
 // Private helper functions
@@ -332,11 +334,13 @@ ble_frame_t ble_encode_config_ack_get_frame(void) {
 // ============================================================================
 
 // Copy decoded payload to appropriate message buffer
-static void ble_decode_store_message(void) {
+static void ble_decode_store_message(uint32_t timestamp_ms) {
     switch (decode_msg_id) {
         case 0x10:
             memcpy(&config_set_decoded, decode_payload_buffer, sizeof(config_set_t));
             config_set_available = true;
+            config_set_timestamp_ms = timestamp_ms;
+            config_set_unread = true;
             break;
         default:
             break;
@@ -345,7 +349,8 @@ static void ble_decode_store_message(void) {
 
 // Decode client message frame (supports multi-frame reassembly)
 // Returns true when complete message is received and validated
-bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len) {
+// time_ms: Current time in milliseconds for timestamping received messages
+bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len, uint32_t time_ms) {
     if (frame == NULL || frame_len < 1) return false;
     
     // Check if this is a first frame
@@ -380,7 +385,7 @@ bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len) {
             decode_valid = true;
             
             // Store in per-message buffer
-            ble_decode_store_message();
+            ble_decode_store_message(time_ms);
             return true;
         } else {
             // Multi-frame message - copy partial payload
@@ -411,7 +416,7 @@ bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len) {
             decode_valid = true;
             
             // Store in per-message buffer
-            ble_decode_store_message();
+            ble_decode_store_message(time_ms);
             return true;
         } else {
             // Continuation frame - copy payload
@@ -426,11 +431,29 @@ bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len) {
 // Get param_id from config_set message
 uint8_t ble_decode_config_set_get_param_id(void) {
     if (!config_set_available) return 0;
+    config_set_unread = false;
     return config_set_decoded.param_id;
 }
 
 // Get value from config_set message
 uint32_t ble_decode_config_set_get_value(void) {
     if (!config_set_available) return 0;
+    config_set_unread = false;
     return config_set_decoded.value;
+}
+
+// ============================================================================
+// Message status functions
+// ============================================================================
+
+// Check if config_set message is unread
+bool ble_decode_config_set_check_is_unread(void) {
+    return config_set_available && config_set_unread;
+}
+
+// Check if config_set data is stale (max age: 1000ms)
+bool ble_decode_config_set_check_data_is_stale(uint32_t time_ms) {
+    if (!config_set_available) return true;
+    uint32_t age_ms = time_ms - config_set_timestamp_ms;
+    return age_ms > 1000;
 }

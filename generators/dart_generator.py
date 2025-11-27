@@ -258,12 +258,16 @@ class DartGenerator:
         # Per-message storage
         for msg_name, msg_info in self.server_messages.items():
             class_name = self.to_pascal_case(msg_name)
-            lines.append(f"  {class_name}? _{self.to_camel_case(msg_name)};")
+            camel_name = self.to_camel_case(msg_name)
+            lines.append(f"  {class_name}? _{camel_name};")
+            lines.append(f"  int _{camel_name}TimestampMs = 0;")
+            lines.append(f"  bool _{camel_name}Unread = false;")
         lines.append("")
 
         lines.append("  /// Decode a frame (supports multi-frame reassembly)")
         lines.append("  /// Returns true when a complete message is received and validated")
-        lines.append("  bool decodeFrame(Uint8List frame) {")
+        lines.append("  /// [timeMs] Current time in milliseconds for timestamping received messages")
+        lines.append("  bool decodeFrame(Uint8List frame, int timeMs) {")
         lines.append("    if (frame.isEmpty) return false;")
         lines.append("")
         lines.append("    // Check if this is a first frame")
@@ -299,7 +303,7 @@ class DartGenerator:
         lines.append("        _valid = true;")
         lines.append("        ")
         lines.append("        // Store decoded message in per-message buffer")
-        lines.append("        _storeMessage();")
+        lines.append("        _storeMessage(timeMs);")
         lines.append("        return true;")
         lines.append("      } else {")
         lines.append("        // Multi-frame message - copy partial payload")
@@ -331,7 +335,7 @@ class DartGenerator:
         lines.append("        _valid = true;")
         lines.append("        ")
         lines.append("        // Store decoded message in per-message buffer")
-        lines.append("        _storeMessage();")
+        lines.append("        _storeMessage(timeMs);")
         lines.append("        return true;")
         lines.append("      } else {")
         lines.append("        // Continuation frame - copy payload")
@@ -346,13 +350,15 @@ class DartGenerator:
 
         # Store message helper
         lines.append("  /// Store decoded message in per-message buffer")
-        lines.append("  void _storeMessage() {")
+        lines.append("  void _storeMessage(int timestampMs) {")
         lines.append("    switch (_msgId) {")
         for msg_name, msg_info in self.server_messages.items():
             class_name = self.to_pascal_case(msg_name)
             camel_name = self.to_camel_case(msg_name)
             lines.append(f"      case {msg_info['id']}:")
             lines.append(f"        _{camel_name} = _decode{class_name}FromBuffer();")
+            lines.append(f"        _{camel_name}TimestampMs = timestampMs;")
+            lines.append(f"        _{camel_name}Unread = true;")
             lines.append(f"        break;")
         lines.append("      default:")
         lines.append("        break;")
@@ -409,7 +415,32 @@ class DartGenerator:
             camel_name = self.to_camel_case(msg_name)
             lines.append(f"  /// Get stored {msg_name} message (returns null if no message available)")
             lines.append(f"  {class_name}? get{class_name}() {{")
+            lines.append(f"    if (_{camel_name} != null) {{")
+            lines.append(f"      _{camel_name}Unread = false;")
+            lines.append(f"    }}")
             lines.append(f"    return _{camel_name};")
+            lines.append("  }")
+            lines.append("")
+
+        # Status methods
+        for msg_name, msg_info in self.server_messages.items():
+            class_name = self.to_pascal_case(msg_name)
+            camel_name = self.to_camel_case(msg_name)
+            max_age = msg_info.get('maxAge', 1000)
+
+            # Check is unread
+            lines.append(f"  /// Check if {msg_name} message is unread")
+            lines.append(f"  bool {camel_name}CheckIsUnread() {{")
+            lines.append(f"    return _{camel_name} != null && _{camel_name}Unread;")
+            lines.append("  }")
+            lines.append("")
+
+            # Check data is stale
+            lines.append(f"  /// Check if {msg_name} data is stale (max age: {max_age}ms)")
+            lines.append(f"  bool {camel_name}CheckDataIsStale(int timeMs) {{")
+            lines.append(f"    if (_{camel_name} == null) return true;")
+            lines.append(f"    final ageMs = timeMs - _{camel_name}TimestampMs;")
+            lines.append(f"    return ageMs > {max_age};")
             lines.append("  }")
             lines.append("")
 

@@ -82,11 +82,20 @@ ble_frame_t ble_encode_config_ack_get_frame(void);
 // ============================================================================
 
 // Generic frame decoding
-bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len);
+// time_ms: Current time in milliseconds for timestamping received messages
+bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len, uint32_t time_ms);
 
 // Get config_set message fields
 uint8_t ble_decode_config_set_get_param_id(void);
 uint32_t ble_decode_config_set_get_value(void);
+
+// ============================================================================
+// Message status functions
+// ============================================================================
+
+// config_set message status
+bool ble_decode_config_set_check_is_unread(void);
+bool ble_decode_config_set_check_data_is_stale(uint32_t time_ms);
 
 #ifdef __cplusplus
 }

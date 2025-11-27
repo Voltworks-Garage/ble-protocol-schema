@@ -156,7 +156,8 @@ class CGenerator:
         lines.append("")
 
         lines.append("// Generic frame decoding")
-        lines.append("bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len);")
+        lines.append("// time_ms: Current time in milliseconds for timestamping received messages")
+        lines.append("bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len, uint32_t time_ms);")
         lines.append("")
 
         for msg_name, msg_info in self.client_messages.items():
@@ -169,6 +170,18 @@ class CGenerator:
                 else:
                     c_type = self.get_c_type(field_type)
                     lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void);")
+            lines.append("")
+
+        # Timestamp and status functions
+        lines.append("// ============================================================================")
+        lines.append("// Message status functions")
+        lines.append("// ============================================================================")
+        lines.append("")
+
+        for msg_name, msg_info in self.client_messages.items():
+            lines.append(f"// {msg_name} message status")
+            lines.append(f"bool ble_decode_{msg_name}_check_is_unread(void);")
+            lines.append(f"bool ble_decode_{msg_name}_check_data_is_stale(uint32_t time_ms);")
             lines.append("")
 
         lines.append("#ifdef __cplusplus")
@@ -264,6 +277,8 @@ class CGenerator:
             msg_size = self.calculate_struct_size(msg_info['fields'])
             lines.append(f"static {msg_name}_t {msg_name}_decoded;")
             lines.append(f"static bool {msg_name}_available;")
+            lines.append(f"static uint32_t {msg_name}_timestamp_ms;")
+            lines.append(f"static bool {msg_name}_unread;")
         lines.append("")
 
         # Checksum function
@@ -356,23 +371,26 @@ class CGenerator:
 
         # Helper function to copy decoded message to per-message buffer
         lines.append("// Copy decoded payload to appropriate message buffer")
-        lines.append("static void ble_decode_store_message(void) {")
+        lines.append("static void ble_decode_store_message(uint32_t timestamp_ms) {")
         lines.append("    switch (decode_msg_id) {")
         for msg_name, msg_info in self.client_messages.items():
             lines.append(f"        case {msg_info['id']}:")
             lines.append(f"            memcpy(&{msg_name}_decoded, decode_payload_buffer, sizeof({msg_name}_t));")
             lines.append(f"            {msg_name}_available = true;")
+            lines.append(f"            {msg_name}_timestamp_ms = timestamp_ms;")
+            lines.append(f"            {msg_name}_unread = true;")
             lines.append(f"            break;")
         lines.append("        default:")
         lines.append("            break;")
         lines.append("    }")
         lines.append("}")
-        lines.append("")
 
         # Generic frame decoder with multi-frame support
+        lines.append("")
         lines.append("// Decode client message frame (supports multi-frame reassembly)")
         lines.append("// Returns true when complete message is received and validated")
-        lines.append("bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len) {")
+        lines.append("// time_ms: Current time in milliseconds for timestamping received messages")
+        lines.append("bool ble_decode_frame(const uint8_t *frame, uint16_t frame_len, uint32_t time_ms) {")
         lines.append("    if (frame == NULL || frame_len < 1) return false;")
         lines.append("    ")
         lines.append("    // Check if this is a first frame")
@@ -407,7 +425,7 @@ class CGenerator:
         lines.append("            decode_valid = true;")
         lines.append("            ")
         lines.append("            // Store in per-message buffer")
-        lines.append("            ble_decode_store_message();")
+        lines.append("            ble_decode_store_message(time_ms);")
         lines.append("            return true;")
         lines.append("        } else {")
         lines.append("            // Multi-frame message - copy partial payload")
@@ -438,7 +456,7 @@ class CGenerator:
         lines.append("            decode_valid = true;")
         lines.append("            ")
         lines.append("            // Store in per-message buffer")
-        lines.append("            ble_decode_store_message();")
+        lines.append("            ble_decode_store_message(time_ms);")
         lines.append("            return true;")
         lines.append("        } else {")
         lines.append("            // Continuation frame - copy payload")
@@ -461,6 +479,7 @@ class CGenerator:
                     # String getter
                     lines.append(f"const uint8_t* ble_decode_{msg_name}_get_{field_name}(void) {{")
                     lines.append(f"    if (!{msg_name}_available) return (const uint8_t*)\"\";")
+                    lines.append(f"    {msg_name}_unread = false;")
                     lines.append(f"    return (const uint8_t*){msg_name}_decoded.{field_name};")
                     lines.append(f"}}")
                 else:
@@ -468,9 +487,35 @@ class CGenerator:
                     c_type = self.get_c_type(field_type)
                     lines.append(f"{c_type} ble_decode_{msg_name}_get_{field_name}(void) {{")
                     lines.append(f"    if (!{msg_name}_available) return 0;")
+                    lines.append(f"    {msg_name}_unread = false;")
                     lines.append(f"    return {msg_name}_decoded.{field_name};")
                     lines.append(f"}}")
                 lines.append("")
+
+        # Time and status functions
+        lines.append("// ============================================================================")
+        lines.append("// Message status functions")
+        lines.append("// ============================================================================")
+        lines.append("")
+
+        for msg_name, msg_info in self.client_messages.items():
+            max_age = msg_info.get('maxAge', 1000)
+
+            # Check is unread
+            lines.append(f"// Check if {msg_name} message is unread")
+            lines.append(f"bool ble_decode_{msg_name}_check_is_unread(void) {{")
+            lines.append(f"    return {msg_name}_available && {msg_name}_unread;")
+            lines.append(f"}}")
+            lines.append("")
+
+            # Check data is stale
+            lines.append(f"// Check if {msg_name} data is stale (max age: {max_age}ms)")
+            lines.append(f"bool ble_decode_{msg_name}_check_data_is_stale(uint32_t time_ms) {{")
+            lines.append(f"    if (!{msg_name}_available) return true;")
+            lines.append(f"    uint32_t age_ms = time_ms - {msg_name}_timestamp_ms;")
+            lines.append(f"    return age_ms > {max_age};")
+            lines.append(f"}}")
+            lines.append("")
 
         return '\n'.join(lines)
 

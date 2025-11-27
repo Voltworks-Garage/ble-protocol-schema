@@ -34,6 +34,7 @@
     "server": {
       "heartbeat": {
         "id": "0x01",
+        "maxAge": 5000,
         "fields": {
           "uptime_ms": "uint32",
           "battery_mv": "uint16",
@@ -42,12 +43,14 @@
       },
       "server_message": {
         "id": "0x04",
+        "maxAge": 1000,
         "fields": {
           "data": {"type": "string", "max_length": 128}
         }
       },
       "sensor_data": {
         "id": "0x02",
+        "maxAge": 2000,
         "fields": {
           "timestamp_ms": "uint32",
           "temperature_c": "int16",
@@ -57,6 +60,7 @@
       },
       "motor_status": {
         "id": "0x03",
+        "maxAge": 1000,
         "fields": {
           "rpm": "uint16",
           "current_ma": "uint16",
@@ -66,6 +70,7 @@
       },
       "config_ack": {
         "id": "0x11",
+        "maxAge": 1000,
         "fields": {
           "param_id": "uint8",
           "result": "uint8"
@@ -75,6 +80,7 @@
     "client": {
       "config_set": {
         "id": "0x10",
+        "maxAge": 1000,
         "fields": {
           "param_id": "uint8",
           "value": "uint32"
