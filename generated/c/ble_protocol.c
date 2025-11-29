@@ -16,8 +16,8 @@
 
 typedef struct {
     uint32_t uptime_ms;
-    uint32_t battery_mv;
-    uint8_t status_flags;
+    uint32_t lvBattery_mv;
+    uint8_t vehicle_state;
 } __attribute__((packed)) heartbeat_t;
 
 typedef struct {
@@ -173,16 +173,16 @@ void ble_encode_heartbeat_set_uptime_ms(uint32_t value) {
     msg->uptime_ms = value;
 }
 
-// Set battery_mv in heartbeat message
-void ble_encode_heartbeat_set_battery_mv(uint32_t value) {
+// Set lvBattery_mv in heartbeat message
+void ble_encode_heartbeat_set_lvBattery_mv(uint32_t value) {
     heartbeat_t *msg = (heartbeat_t*)&heartbeat_encode_buffer[3];
-    msg->battery_mv = value;
+    msg->lvBattery_mv = value;
 }
 
-// Set status_flags in heartbeat message
-void ble_encode_heartbeat_set_status_flags(uint8_t value) {
+// Set vehicle_state in heartbeat message
+void ble_encode_heartbeat_set_vehicle_state(uint8_t value) {
     heartbeat_t *msg = (heartbeat_t*)&heartbeat_encode_buffer[3];
-    msg->status_flags = value;
+    msg->vehicle_state = value;
 }
 
 // Get encoded heartbeat frame

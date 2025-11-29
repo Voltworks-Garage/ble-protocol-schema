@@ -6,8 +6,8 @@
         "maxAge": 5000,
         "fields": {
           "uptime_ms": "uint32",
-          "battery_mv": "uint32",
-          "status_flags": "uint8"
+          "lvBattery_mv": "uint32",
+          "vehicle_state": "uint8"
         }
       },
       "server_message": {

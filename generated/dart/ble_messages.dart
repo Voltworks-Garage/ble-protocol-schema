@@ -247,10 +247,10 @@ class BleDecoder {
     msg._uptimeMs = data.getUint32(offset, Endian.little);
     offset += 4;
 
-    msg._batteryMv = data.getUint32(offset, Endian.little);
+    msg._lvBatteryMv = data.getUint32(offset, Endian.little);
     offset += 4;
 
-    msg._statusFlags = data.getUint8(offset);
+    msg._vehicleState = data.getUint8(offset);
     offset += 1;
 
     return msg;
@@ -637,19 +637,19 @@ class BleDecoder {
 /// Heartbeat message - Server to Client
 class Heartbeat {
   int _uptimeMs = 0;
-  int _batteryMv = 0;
-  int _statusFlags = 0;
+  int _lvBatteryMv = 0;
+  int _vehicleState = 0;
 
   int get uptimeMs => _uptimeMs;
-  int get batteryMv => _batteryMv;
-  int get statusFlags => _statusFlags;
+  int get lvBatteryMv => _lvBatteryMv;
+  int get vehicleState => _vehicleState;
 
   Heartbeat._();
 
   int get messageId => 0x01;
 
   @override
-  String toString() => 'Heartbeat(uptime_ms: ${uptimeMs}, battery_mv: ${batteryMv}, status_flags: ${statusFlags})';
+  String toString() => 'Heartbeat(uptime_ms: ${uptimeMs}, lvBattery_mv: ${lvBatteryMv}, vehicle_state: ${vehicleState})';
 }
 
 /// ServerMessage message - Server to Client

@@ -48,8 +48,8 @@ typedef struct {
 // Encode and get heartbeat message
 void ble_encode_heartbeat_begin(void);
 void ble_encode_heartbeat_set_uptime_ms(uint32_t value);
-void ble_encode_heartbeat_set_battery_mv(uint32_t value);
-void ble_encode_heartbeat_set_status_flags(uint8_t value);
+void ble_encode_heartbeat_set_lvBattery_mv(uint32_t value);
+void ble_encode_heartbeat_set_vehicle_state(uint8_t value);
 ble_frame_t ble_encode_heartbeat_get_frame(void);
 
 // Encode and get server_message message
