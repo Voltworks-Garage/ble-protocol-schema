@@ -21,9 +21,11 @@ const int bleSyncFirst = 0xAA;
 // Message IDs
 const int msgIdHeartbeat = 0x01;
 const int msgIdServerMessage = 0x04;
-const int msgIdSensorData = 0x02;
-const int msgIdMotorStatus = 0x03;
-const int msgIdConfigAck = 0x11;
+const int msgIdBmsData = 0x02;
+const int msgIdBmsStatus = 0x03;
+const int msgIdMotorData = 0x05;
+const int msgIdSafetyStatus = 0x06;
+const int msgIdPerformanceData = 0x07;
 const int msgIdConfigSet = 0x10;
 
 // ============================================================================
@@ -94,15 +96,21 @@ class BleDecoder {
   ServerMessage? _serverMessage;
   int _serverMessageTimestampMs = 0;
   bool _serverMessageUnread = false;
-  SensorData? _sensorData;
-  int _sensorDataTimestampMs = 0;
-  bool _sensorDataUnread = false;
-  MotorStatus? _motorStatus;
-  int _motorStatusTimestampMs = 0;
-  bool _motorStatusUnread = false;
-  ConfigAck? _configAck;
-  int _configAckTimestampMs = 0;
-  bool _configAckUnread = false;
+  BmsData? _bmsData;
+  int _bmsDataTimestampMs = 0;
+  bool _bmsDataUnread = false;
+  BmsStatus? _bmsStatus;
+  int _bmsStatusTimestampMs = 0;
+  bool _bmsStatusUnread = false;
+  MotorData? _motorData;
+  int _motorDataTimestampMs = 0;
+  bool _motorDataUnread = false;
+  SafetyStatus? _safetyStatus;
+  int _safetyStatusTimestampMs = 0;
+  bool _safetyStatusUnread = false;
+  PerformanceData? _performanceData;
+  int _performanceDataTimestampMs = 0;
+  bool _performanceDataUnread = false;
 
   /// Decode a frame (supports multi-frame reassembly)
   /// Returns true when a complete message is received and validated
@@ -201,19 +209,29 @@ class BleDecoder {
         _serverMessageUnread = true;
         break;
       case 0x02:
-        _sensorData = _decodeSensorDataFromBuffer();
-        _sensorDataTimestampMs = timestampMs;
-        _sensorDataUnread = true;
+        _bmsData = _decodeBmsDataFromBuffer();
+        _bmsDataTimestampMs = timestampMs;
+        _bmsDataUnread = true;
         break;
       case 0x03:
-        _motorStatus = _decodeMotorStatusFromBuffer();
-        _motorStatusTimestampMs = timestampMs;
-        _motorStatusUnread = true;
+        _bmsStatus = _decodeBmsStatusFromBuffer();
+        _bmsStatusTimestampMs = timestampMs;
+        _bmsStatusUnread = true;
         break;
-      case 0x11:
-        _configAck = _decodeConfigAckFromBuffer();
-        _configAckTimestampMs = timestampMs;
-        _configAckUnread = true;
+      case 0x05:
+        _motorData = _decodeMotorDataFromBuffer();
+        _motorDataTimestampMs = timestampMs;
+        _motorDataUnread = true;
+        break;
+      case 0x06:
+        _safetyStatus = _decodeSafetyStatusFromBuffer();
+        _safetyStatusTimestampMs = timestampMs;
+        _safetyStatusUnread = true;
+        break;
+      case 0x07:
+        _performanceData = _decodePerformanceDataFromBuffer();
+        _performanceDataTimestampMs = timestampMs;
+        _performanceDataUnread = true;
         break;
       default:
         break;
@@ -229,8 +247,8 @@ class BleDecoder {
     msg._uptimeMs = data.getUint32(offset, Endian.little);
     offset += 4;
 
-    msg._batteryMv = data.getUint16(offset, Endian.little);
-    offset += 2;
+    msg._batteryMv = data.getUint32(offset, Endian.little);
+    offset += 4;
 
     msg._statusFlags = data.getUint8(offset);
     offset += 1;
@@ -257,59 +275,215 @@ class BleDecoder {
     return msg;
   }
 
-  /// Internal: Decode sensor_data from payload buffer
-  SensorData _decodeSensorDataFromBuffer() {
-    final msg = SensorData._();
+  /// Internal: Decode bms_data from payload buffer
+  BmsData _decodeBmsDataFromBuffer() {
+    final msg = BmsData._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
 
-    msg._timestampMs = data.getUint32(offset, Endian.little);
-    offset += 4;
-
-    msg._temperatureC = data.getInt16(offset, Endian.little);
+    msg._cellVoltage1Mv = data.getUint16(offset, Endian.little);
     offset += 2;
 
-    msg._humidityPct = data.getUint8(offset);
-    offset += 1;
+    msg._cellVoltage2Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
 
-    msg._pressurePa = data.getUint32(offset, Endian.little);
-    offset += 4;
+    msg._cellVoltage3Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage4Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage5Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage6Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage7Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage8Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage9Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage10Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage11Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage12Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage13Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage14Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage15Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage16Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage17Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage18Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage19Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage20Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage21Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage22Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage23Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellVoltage24Mv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._packTempC = data.getInt16(offset, Endian.little);
+    offset += 2;
 
     return msg;
   }
 
-  /// Internal: Decode motor_status from payload buffer
-  MotorStatus _decodeMotorStatusFromBuffer() {
-    final msg = MotorStatus._();
+  /// Internal: Decode bms_status from payload buffer
+  BmsStatus _decodeBmsStatusFromBuffer() {
+    final msg = BmsStatus._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
 
-    msg._rpm = data.getUint16(offset, Endian.little);
-    offset += 2;
-
-    msg._currentMa = data.getUint16(offset, Endian.little);
-    offset += 2;
-
-    msg._tempC = data.getInt8(offset);
+    msg._socPercent = data.getUint8(offset);
     offset += 1;
 
-    msg._faultCode = data.getUint8(offset);
+    msg._sohPercent = data.getUint8(offset);
+    offset += 1;
+
+    msg._packVoltageMv = data.getUint32(offset, Endian.little);
+    offset += 4;
+
+    msg._packCurrentMa = data.getInt32(offset, Endian.little);
+    offset += 4;
+
+    msg._remainingRangeKm = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._timeToEmptyMin = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._timeToFullMin = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._cellDeltaMv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._minCellVoltageMv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._maxCellVoltageMv = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._minCellIndex = data.getUint8(offset);
+    offset += 1;
+
+    msg._maxCellIndex = data.getUint8(offset);
     offset += 1;
 
     return msg;
   }
 
-  /// Internal: Decode config_ack from payload buffer
-  ConfigAck _decodeConfigAckFromBuffer() {
-    final msg = ConfigAck._();
+  /// Internal: Decode motor_data from payload buffer
+  MotorData _decodeMotorDataFromBuffer() {
+    final msg = MotorData._();
     final data = ByteData.view(_payloadBuffer.buffer);
     int offset = 0;
 
-    msg._paramId = data.getUint8(offset);
+    msg._motorTempC = data.getInt16(offset, Endian.little);
+    offset += 2;
+
+    msg._controllerTempC = data.getInt16(offset, Endian.little);
+    offset += 2;
+
+    msg._motorRpm = data.getUint32(offset, Endian.little);
+    offset += 4;
+
+    msg._powerW = data.getUint32(offset, Endian.little);
+    offset += 4;
+
+    msg._torqueNm = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._throttlePercent = data.getUint8(offset);
     offset += 1;
 
-    msg._result = data.getUint8(offset);
+    msg._regenLevelPercent = data.getUint8(offset);
     offset += 1;
+
+    return msg;
+  }
+
+  /// Internal: Decode safety_status from payload buffer
+  SafetyStatus _decodeSafetyStatusFromBuffer() {
+    final msg = SafetyStatus._();
+    final data = ByteData.view(_payloadBuffer.buffer);
+    int offset = 0;
+
+    msg._faultCodes = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._warningFlags = data.getUint32(offset, Endian.little);
+    offset += 4;
+
+    msg._chargingStatus = data.getUint8(offset);
+    offset += 1;
+
+    msg._rideMode = data.getUint8(offset);
+    offset += 1;
+
+    msg._frontBrakeEngaged = data.getUint8(offset);
+    offset += 1;
+
+    msg._rearBrakeEngaged = data.getUint8(offset);
+    offset += 1;
+
+    return msg;
+  }
+
+  /// Internal: Decode performance_data from payload buffer
+  PerformanceData _decodePerformanceDataFromBuffer() {
+    final msg = PerformanceData._();
+    final data = ByteData.view(_payloadBuffer.buffer);
+    int offset = 0;
+
+    msg._odometerKm = data.getUint32(offset, Endian.little);
+    offset += 4;
+
+    msg._tripKm = data.getUint32(offset, Endian.little);
+    offset += 4;
+
+    msg._avgSpeedKph = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._topSpeedKph = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._energyWhPerKm = data.getUint16(offset, Endian.little);
+    offset += 2;
+
+    msg._accel060Ms = data.getUint16(offset, Endian.little);
+    offset += 2;
 
     return msg;
   }
@@ -330,28 +504,44 @@ class BleDecoder {
     return _serverMessage;
   }
 
-  /// Get stored sensor_data message (returns null if no message available)
-  SensorData? getSensorData() {
-    if (_sensorData != null) {
-      _sensorDataUnread = false;
+  /// Get stored bms_data message (returns null if no message available)
+  BmsData? getBmsData() {
+    if (_bmsData != null) {
+      _bmsDataUnread = false;
     }
-    return _sensorData;
+    return _bmsData;
   }
 
-  /// Get stored motor_status message (returns null if no message available)
-  MotorStatus? getMotorStatus() {
-    if (_motorStatus != null) {
-      _motorStatusUnread = false;
+  /// Get stored bms_status message (returns null if no message available)
+  BmsStatus? getBmsStatus() {
+    if (_bmsStatus != null) {
+      _bmsStatusUnread = false;
     }
-    return _motorStatus;
+    return _bmsStatus;
   }
 
-  /// Get stored config_ack message (returns null if no message available)
-  ConfigAck? getConfigAck() {
-    if (_configAck != null) {
-      _configAckUnread = false;
+  /// Get stored motor_data message (returns null if no message available)
+  MotorData? getMotorData() {
+    if (_motorData != null) {
+      _motorDataUnread = false;
     }
-    return _configAck;
+    return _motorData;
+  }
+
+  /// Get stored safety_status message (returns null if no message available)
+  SafetyStatus? getSafetyStatus() {
+    if (_safetyStatus != null) {
+      _safetyStatusUnread = false;
+    }
+    return _safetyStatus;
+  }
+
+  /// Get stored performance_data message (returns null if no message available)
+  PerformanceData? getPerformanceData() {
+    if (_performanceData != null) {
+      _performanceDataUnread = false;
+    }
+    return _performanceData;
   }
 
   /// Check if heartbeat message is unread
@@ -378,39 +568,63 @@ class BleDecoder {
     return ageMs > 1000;
   }
 
-  /// Check if sensor_data message is unread
-  bool sensorDataCheckIsUnread() {
-    return _sensorData != null && _sensorDataUnread;
+  /// Check if bms_data message is unread
+  bool bmsDataCheckIsUnread() {
+    return _bmsData != null && _bmsDataUnread;
   }
 
-  /// Check if sensor_data data is stale (max age: 2000ms)
-  bool sensorDataCheckDataIsStale(int timeMs) {
-    if (_sensorData == null) return true;
-    final ageMs = timeMs - _sensorDataTimestampMs;
+  /// Check if bms_data data is stale (max age: 2000ms)
+  bool bmsDataCheckDataIsStale(int timeMs) {
+    if (_bmsData == null) return true;
+    final ageMs = timeMs - _bmsDataTimestampMs;
     return ageMs > 2000;
   }
 
-  /// Check if motor_status message is unread
-  bool motorStatusCheckIsUnread() {
-    return _motorStatus != null && _motorStatusUnread;
+  /// Check if bms_status message is unread
+  bool bmsStatusCheckIsUnread() {
+    return _bmsStatus != null && _bmsStatusUnread;
   }
 
-  /// Check if motor_status data is stale (max age: 1000ms)
-  bool motorStatusCheckDataIsStale(int timeMs) {
-    if (_motorStatus == null) return true;
-    final ageMs = timeMs - _motorStatusTimestampMs;
-    return ageMs > 1000;
+  /// Check if bms_status data is stale (max age: 2000ms)
+  bool bmsStatusCheckDataIsStale(int timeMs) {
+    if (_bmsStatus == null) return true;
+    final ageMs = timeMs - _bmsStatusTimestampMs;
+    return ageMs > 2000;
   }
 
-  /// Check if config_ack message is unread
-  bool configAckCheckIsUnread() {
-    return _configAck != null && _configAckUnread;
+  /// Check if motor_data message is unread
+  bool motorDataCheckIsUnread() {
+    return _motorData != null && _motorDataUnread;
   }
 
-  /// Check if config_ack data is stale (max age: 1000ms)
-  bool configAckCheckDataIsStale(int timeMs) {
-    if (_configAck == null) return true;
-    final ageMs = timeMs - _configAckTimestampMs;
+  /// Check if motor_data data is stale (max age: 500ms)
+  bool motorDataCheckDataIsStale(int timeMs) {
+    if (_motorData == null) return true;
+    final ageMs = timeMs - _motorDataTimestampMs;
+    return ageMs > 500;
+  }
+
+  /// Check if safety_status message is unread
+  bool safetyStatusCheckIsUnread() {
+    return _safetyStatus != null && _safetyStatusUnread;
+  }
+
+  /// Check if safety_status data is stale (max age: 500ms)
+  bool safetyStatusCheckDataIsStale(int timeMs) {
+    if (_safetyStatus == null) return true;
+    final ageMs = timeMs - _safetyStatusTimestampMs;
+    return ageMs > 500;
+  }
+
+  /// Check if performance_data message is unread
+  bool performanceDataCheckIsUnread() {
+    return _performanceData != null && _performanceDataUnread;
+  }
+
+  /// Check if performance_data data is stale (max age: 1000ms)
+  bool performanceDataCheckDataIsStale(int timeMs) {
+    if (_performanceData == null) return true;
+    final ageMs = timeMs - _performanceDataTimestampMs;
     return ageMs > 1000;
   }
 
@@ -452,64 +666,180 @@ class ServerMessage {
   String toString() => 'ServerMessage(data: ${data})';
 }
 
-/// SensorData message - Server to Client
-class SensorData {
-  int _timestampMs = 0;
-  int _temperatureC = 0;
-  int _humidityPct = 0;
-  int _pressurePa = 0;
+/// BmsData message - Server to Client
+class BmsData {
+  int _cellVoltage1Mv = 0;
+  int _cellVoltage2Mv = 0;
+  int _cellVoltage3Mv = 0;
+  int _cellVoltage4Mv = 0;
+  int _cellVoltage5Mv = 0;
+  int _cellVoltage6Mv = 0;
+  int _cellVoltage7Mv = 0;
+  int _cellVoltage8Mv = 0;
+  int _cellVoltage9Mv = 0;
+  int _cellVoltage10Mv = 0;
+  int _cellVoltage11Mv = 0;
+  int _cellVoltage12Mv = 0;
+  int _cellVoltage13Mv = 0;
+  int _cellVoltage14Mv = 0;
+  int _cellVoltage15Mv = 0;
+  int _cellVoltage16Mv = 0;
+  int _cellVoltage17Mv = 0;
+  int _cellVoltage18Mv = 0;
+  int _cellVoltage19Mv = 0;
+  int _cellVoltage20Mv = 0;
+  int _cellVoltage21Mv = 0;
+  int _cellVoltage22Mv = 0;
+  int _cellVoltage23Mv = 0;
+  int _cellVoltage24Mv = 0;
+  int _packTempC = 0;
 
-  int get timestampMs => _timestampMs;
-  int get temperatureC => _temperatureC;
-  int get humidityPct => _humidityPct;
-  int get pressurePa => _pressurePa;
+  int get cellVoltage1Mv => _cellVoltage1Mv;
+  int get cellVoltage2Mv => _cellVoltage2Mv;
+  int get cellVoltage3Mv => _cellVoltage3Mv;
+  int get cellVoltage4Mv => _cellVoltage4Mv;
+  int get cellVoltage5Mv => _cellVoltage5Mv;
+  int get cellVoltage6Mv => _cellVoltage6Mv;
+  int get cellVoltage7Mv => _cellVoltage7Mv;
+  int get cellVoltage8Mv => _cellVoltage8Mv;
+  int get cellVoltage9Mv => _cellVoltage9Mv;
+  int get cellVoltage10Mv => _cellVoltage10Mv;
+  int get cellVoltage11Mv => _cellVoltage11Mv;
+  int get cellVoltage12Mv => _cellVoltage12Mv;
+  int get cellVoltage13Mv => _cellVoltage13Mv;
+  int get cellVoltage14Mv => _cellVoltage14Mv;
+  int get cellVoltage15Mv => _cellVoltage15Mv;
+  int get cellVoltage16Mv => _cellVoltage16Mv;
+  int get cellVoltage17Mv => _cellVoltage17Mv;
+  int get cellVoltage18Mv => _cellVoltage18Mv;
+  int get cellVoltage19Mv => _cellVoltage19Mv;
+  int get cellVoltage20Mv => _cellVoltage20Mv;
+  int get cellVoltage21Mv => _cellVoltage21Mv;
+  int get cellVoltage22Mv => _cellVoltage22Mv;
+  int get cellVoltage23Mv => _cellVoltage23Mv;
+  int get cellVoltage24Mv => _cellVoltage24Mv;
+  int get packTempC => _packTempC;
 
-  SensorData._();
+  BmsData._();
 
   int get messageId => 0x02;
 
   @override
-  String toString() => 'SensorData(timestamp_ms: ${timestampMs}, temperature_c: ${temperatureC}, humidity_pct: ${humidityPct}, pressure_pa: ${pressurePa})';
+  String toString() => 'BmsData(cellVoltage1_mv: ${cellVoltage1Mv}, cellVoltage2_mv: ${cellVoltage2Mv}, cellVoltage3_mv: ${cellVoltage3Mv}, cellVoltage4_mv: ${cellVoltage4Mv}, cellVoltage5_mv: ${cellVoltage5Mv}, cellVoltage6_mv: ${cellVoltage6Mv}, cellVoltage7_mv: ${cellVoltage7Mv}, cellVoltage8_mv: ${cellVoltage8Mv}, cellVoltage9_mv: ${cellVoltage9Mv}, cellVoltage10_mv: ${cellVoltage10Mv}, cellVoltage11_mv: ${cellVoltage11Mv}, cellVoltage12_mv: ${cellVoltage12Mv}, cellVoltage13_mv: ${cellVoltage13Mv}, cellVoltage14_mv: ${cellVoltage14Mv}, cellVoltage15_mv: ${cellVoltage15Mv}, cellVoltage16_mv: ${cellVoltage16Mv}, cellVoltage17_mv: ${cellVoltage17Mv}, cellVoltage18_mv: ${cellVoltage18Mv}, cellVoltage19_mv: ${cellVoltage19Mv}, cellVoltage20_mv: ${cellVoltage20Mv}, cellVoltage21_mv: ${cellVoltage21Mv}, cellVoltage22_mv: ${cellVoltage22Mv}, cellVoltage23_mv: ${cellVoltage23Mv}, cellVoltage24_mv: ${cellVoltage24Mv}, packTemp_c: ${packTempC})';
 }
 
-/// MotorStatus message - Server to Client
-class MotorStatus {
-  int _rpm = 0;
-  int _currentMa = 0;
-  int _tempC = 0;
-  int _faultCode = 0;
+/// BmsStatus message - Server to Client
+class BmsStatus {
+  int _socPercent = 0;
+  int _sohPercent = 0;
+  int _packVoltageMv = 0;
+  int _packCurrentMa = 0;
+  int _remainingRangeKm = 0;
+  int _timeToEmptyMin = 0;
+  int _timeToFullMin = 0;
+  int _cellDeltaMv = 0;
+  int _minCellVoltageMv = 0;
+  int _maxCellVoltageMv = 0;
+  int _minCellIndex = 0;
+  int _maxCellIndex = 0;
 
-  int get rpm => _rpm;
-  int get currentMa => _currentMa;
-  int get tempC => _tempC;
-  int get faultCode => _faultCode;
+  int get socPercent => _socPercent;
+  int get sohPercent => _sohPercent;
+  int get packVoltageMv => _packVoltageMv;
+  int get packCurrentMa => _packCurrentMa;
+  int get remainingRangeKm => _remainingRangeKm;
+  int get timeToEmptyMin => _timeToEmptyMin;
+  int get timeToFullMin => _timeToFullMin;
+  int get cellDeltaMv => _cellDeltaMv;
+  int get minCellVoltageMv => _minCellVoltageMv;
+  int get maxCellVoltageMv => _maxCellVoltageMv;
+  int get minCellIndex => _minCellIndex;
+  int get maxCellIndex => _maxCellIndex;
 
-  MotorStatus._();
+  BmsStatus._();
 
   int get messageId => 0x03;
 
   @override
-  String toString() => 'MotorStatus(rpm: ${rpm}, current_ma: ${currentMa}, temp_c: ${tempC}, fault_code: ${faultCode})';
+  String toString() => 'BmsStatus(soc_percent: ${socPercent}, soh_percent: ${sohPercent}, packVoltage_mv: ${packVoltageMv}, packCurrent_ma: ${packCurrentMa}, remainingRange_km: ${remainingRangeKm}, timeToEmpty_min: ${timeToEmptyMin}, timeToFull_min: ${timeToFullMin}, cellDelta_mv: ${cellDeltaMv}, minCellVoltage_mv: ${minCellVoltageMv}, maxCellVoltage_mv: ${maxCellVoltageMv}, minCellIndex: ${minCellIndex}, maxCellIndex: ${maxCellIndex})';
 }
 
-/// ConfigAck message - Server to Client
-class ConfigAck {
-  int _paramId = 0;
-  int _result = 0;
+/// MotorData message - Server to Client
+class MotorData {
+  int _motorTempC = 0;
+  int _controllerTempC = 0;
+  int _motorRpm = 0;
+  int _powerW = 0;
+  int _torqueNm = 0;
+  int _throttlePercent = 0;
+  int _regenLevelPercent = 0;
 
-  int get paramId => _paramId;
-  int get result => _result;
+  int get motorTempC => _motorTempC;
+  int get controllerTempC => _controllerTempC;
+  int get motorRpm => _motorRpm;
+  int get powerW => _powerW;
+  int get torqueNm => _torqueNm;
+  int get throttlePercent => _throttlePercent;
+  int get regenLevelPercent => _regenLevelPercent;
 
-  ConfigAck._();
+  MotorData._();
 
-  int get messageId => 0x11;
+  int get messageId => 0x05;
 
   @override
-  String toString() => 'ConfigAck(param_id: ${paramId}, result: ${result})';
+  String toString() => 'MotorData(motorTemp_c: ${motorTempC}, controllerTemp_c: ${controllerTempC}, motorRpm: ${motorRpm}, power_w: ${powerW}, torque_nm: ${torqueNm}, throttle_percent: ${throttlePercent}, regenLevel_percent: ${regenLevelPercent})';
+}
+
+/// SafetyStatus message - Server to Client
+class SafetyStatus {
+  int _faultCodes = 0;
+  int _warningFlags = 0;
+  int _chargingStatus = 0;
+  int _rideMode = 0;
+  int _frontBrakeEngaged = 0;
+  int _rearBrakeEngaged = 0;
+
+  int get faultCodes => _faultCodes;
+  int get warningFlags => _warningFlags;
+  int get chargingStatus => _chargingStatus;
+  int get rideMode => _rideMode;
+  int get frontBrakeEngaged => _frontBrakeEngaged;
+  int get rearBrakeEngaged => _rearBrakeEngaged;
+
+  SafetyStatus._();
+
+  int get messageId => 0x06;
+
+  @override
+  String toString() => 'SafetyStatus(faultCodes: ${faultCodes}, warning_flags: ${warningFlags}, charging_status: ${chargingStatus}, ride_mode: ${rideMode}, frontBrake_engaged: ${frontBrakeEngaged}, rearBrake_engaged: ${rearBrakeEngaged})';
+}
+
+/// PerformanceData message - Server to Client
+class PerformanceData {
+  int _odometerKm = 0;
+  int _tripKm = 0;
+  int _avgSpeedKph = 0;
+  int _topSpeedKph = 0;
+  int _energyWhPerKm = 0;
+  int _accel060Ms = 0;
+
+  int get odometerKm => _odometerKm;
+  int get tripKm => _tripKm;
+  int get avgSpeedKph => _avgSpeedKph;
+  int get topSpeedKph => _topSpeedKph;
+  int get energyWhPerKm => _energyWhPerKm;
+  int get accel060Ms => _accel060Ms;
+
+  PerformanceData._();
+
+  int get messageId => 0x07;
+
+  @override
+  String toString() => 'PerformanceData(odometer_km: ${odometerKm}, trip_km: ${tripKm}, avgSpeed_kph: ${avgSpeedKph}, topSpeed_kph: ${topSpeedKph}, energy_wh_per_km: ${energyWhPerKm}, accel_0_60_ms: ${accel060Ms})';
 }
 
 // ============================================================================
-// Private helper functions
+// Protocol layer helper functions
 // ============================================================================
 
 // Calculate sum-mod-256 checksum

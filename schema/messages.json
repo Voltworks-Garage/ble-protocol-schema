@@ -1,0 +1,126 @@
+{
+  "messages": {
+    "server": {
+      "heartbeat": {
+        "id": "0x01",
+        "maxAge": 5000,
+        "fields": {
+          "uptime_ms": "uint32",
+          "battery_mv": "uint32",
+          "status_flags": "uint8"
+        }
+      },
+      "server_message": {
+        "id": "0x04",
+        "maxAge": 1000,
+        "fields": {
+          "data": {
+            "type": "string",
+            "max_length": 128
+          }
+        }
+      },
+      "bms_data": {
+        "id": "0x02",
+        "maxAge": 2000,
+        "fields": {
+          "cellVoltage1_mv": "uint16",
+          "cellVoltage2_mv": "uint16",
+          "cellVoltage3_mv": "uint16",
+          "cellVoltage4_mv": "uint16",
+          "cellVoltage5_mv": "uint16",
+          "cellVoltage6_mv": "uint16",
+          "cellVoltage7_mv": "uint16",
+          "cellVoltage8_mv": "uint16",
+          "cellVoltage9_mv": "uint16",
+          "cellVoltage10_mv": "uint16",
+          "cellVoltage11_mv": "uint16",
+          "cellVoltage12_mv": "uint16",
+          "cellVoltage13_mv": "uint16",
+          "cellVoltage14_mv": "uint16",
+          "cellVoltage15_mv": "uint16",
+          "cellVoltage16_mv": "uint16",
+          "cellVoltage17_mv": "uint16",
+          "cellVoltage18_mv": "uint16",
+          "cellVoltage19_mv": "uint16",
+          "cellVoltage20_mv": "uint16",
+          "cellVoltage21_mv": "uint16",
+          "cellVoltage22_mv": "uint16",
+          "cellVoltage23_mv": "uint16",
+          "cellVoltage24_mv": "uint16",
+          "packTemp_c": "int16"
+        }
+      },
+
+      "bms_status": {
+        "id": "0x03",
+        "maxAge": 2000,
+        "fields": {
+          "soc_percent": "uint8",
+          "soh_percent": "uint8",
+          "packVoltage_mv": "uint32",
+          "packCurrent_ma": "int32",
+          "remainingRange_km": "uint16",
+          "timeToEmpty_min": "uint16",
+          "timeToFull_min": "uint16",
+          "cellDelta_mv": "uint16",
+          "minCellVoltage_mv": "uint16",
+          "maxCellVoltage_mv": "uint16",
+          "minCellIndex": "uint8",
+          "maxCellIndex": "uint8"
+        }
+      },
+
+      "motor_data": {
+        "id": "0x05",
+        "maxAge": 500,
+        "fields": {
+          "motorTemp_c": "int16",
+          "controllerTemp_c": "int16",
+          "motorRpm": "uint32",
+          "power_w": "uint32",
+          "torque_nm": "uint16",
+          "throttle_percent": "uint8",
+          "regenLevel_percent": "uint8"
+        }
+      },
+
+      "safety_status": {
+        "id": "0x06",
+        "maxAge": 500,
+        "fields": {
+          "faultCodes": "uint16",
+          "warning_flags": "uint32",
+          "charging_status": "uint8",
+          "ride_mode": "uint8",
+          "frontBrake_engaged": "uint8",
+          "rearBrake_engaged": "uint8"
+        }
+      },
+
+      "performance_data": {
+        "id": "0x07",
+        "maxAge": 1000,
+        "fields": {
+          "odometer_km": "uint32",
+          "trip_km": "uint32",
+          "avgSpeed_kph": "uint16",
+          "topSpeed_kph": "uint16",
+          "energy_wh_per_km": "uint16",
+          "accel_0_60_ms": "uint16"
+        }
+      }
+    },
+
+    "client": {
+      "config_set": {
+        "id": "0x10",
+        "maxAge": 1000,
+        "fields": {
+          "param_id": "uint8",
+          "value": "uint32"
+        }
+      }
+    }
+  }
+}

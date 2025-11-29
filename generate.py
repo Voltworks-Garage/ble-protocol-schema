@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 BLE Protocol Code Generator
-Generates C and Dart code from schema.json
+Generates C and Dart code from protocol and message schemas
 """
 
 import argparse
@@ -18,7 +18,7 @@ from dart_generator import generate_dart_code
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate C and Dart code from BLE protocol schema',
+        description='Generate C and Dart code from BLE protocol schemas',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -31,15 +31,21 @@ Examples:
   # Generate only Dart code
   python generate.py --lang dart
 
-  # Use custom schema and output directory
-  python generate.py --schema custom_schema.json --output my_output
+  # Use custom schemas and output directory
+  python generate.py --protocol custom_protocol.json --messages custom_messages.json --output my_output
         """
     )
 
     parser.add_argument(
-        '--schema',
-        default='schema/schema.json',
-        help='Path to schema.json file (default: schema/schema.json)'
+        '--protocol',
+        default='schema/protocol.json',
+        help='Path to protocol.json file (default: schema/protocol.json)'
+    )
+
+    parser.add_argument(
+        '--messages',
+        default='schema/messages.json',
+        help='Path to messages.json file (default: schema/messages.json)'
     )
 
     parser.add_argument(
@@ -57,9 +63,13 @@ Examples:
 
     args = parser.parse_args()
 
-    # Verify schema exists
-    if not os.path.exists(args.schema):
-        print(f"Error: Schema file not found: {args.schema}")
+    # Verify schemas exist
+    if not os.path.exists(args.protocol):
+        print(f"Error: Protocol schema file not found: {args.protocol}")
+        sys.exit(1)
+
+    if not os.path.exists(args.messages):
+        print(f"Error: Messages schema file not found: {args.messages}")
         sys.exit(1)
 
     # Create output directories
@@ -73,17 +83,19 @@ Examples:
         os.makedirs(dart_output, exist_ok=True)
 
     # Generate code
-    print(f"Reading schema from: {args.schema}")
+    print(f"Reading schemas:")
+    print(f"  Protocol: {args.protocol}")
+    print(f"  Messages: {args.messages}")
     print()
 
     if args.lang in ['c', 'all']:
         print("Generating C code...")
-        generate_c_code(args.schema, c_output)
+        generate_c_code(args.protocol, args.messages, c_output)
         print()
 
     if args.lang in ['dart', 'all']:
         print("Generating Dart code...")
-        generate_dart_code(args.schema, dart_output)
+        generate_dart_code(args.protocol, args.messages, dart_output)
         print()
 
     print("Code generation complete!")

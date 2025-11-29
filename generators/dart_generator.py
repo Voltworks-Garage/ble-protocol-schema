@@ -14,13 +14,158 @@ from typing import Dict, List, Any, Tuple
 
 
 class DartGenerator:
-    def __init__(self, schema: Dict[str, Any]):
-        self.schema = schema
-        self.protocol = schema['protocol']
-        self.frame = schema['frame']
-        self.server_messages = schema['messages']['server']
-        self.client_messages = schema['messages']['client']
-        self.types = schema['types']
+    def __init__(self, protocol_schema: Dict[str, Any], messages_schema: Dict[str, Any]):
+        """
+        Initialize generator with separate protocol and message schemas
+
+        Args:
+            protocol_schema: Contains protocol, frame, and types definitions
+            messages_schema: Contains message definitions (server and client)
+        """
+        self.protocol = protocol_schema['protocol']
+        self.frame = protocol_schema['frame']
+        self.types = protocol_schema['types']
+        self.server_messages = messages_schema['messages']['server']
+        self.client_messages = messages_schema['messages']['client']
+
+    # ========================================================================
+    # Protocol Layer - Frame format and encoding/decoding logic
+    # ========================================================================
+
+    def _get_protocol_constants(self) -> List[str]:
+        """Generate protocol-level constants (sync bytes, etc.)"""
+        lines = []
+        lines.append("// Protocol constants")
+        first_sync = next(f['value'] for f in self.frame['first']['fields'] if f['name'] == 'sync')
+        lines.append(f"const int bleSyncFirst = {first_sync};")
+        lines.append("")
+        return lines
+
+    def _generate_checksum_function(self) -> List[str]:
+        """Generate checksum calculation function"""
+        lines = []
+        lines.append("// Calculate sum-mod-256 checksum")
+        lines.append("int _calculateChecksum(Uint8List data) {")
+        lines.append("  int sum = 0;")
+        lines.append("  for (var byte in data) {")
+        lines.append("    sum += byte;")
+        lines.append("  }")
+        lines.append("  return sum & 0xFF;")
+        lines.append("}")
+        return lines
+
+    def _generate_decode_frame_method(self) -> List[str]:
+        """Generate frame decoding method with multi-frame support"""
+        lines = []
+        lines.append("  /// Decode a frame (supports multi-frame reassembly)")
+        lines.append("  /// Returns true when a complete message is received and validated")
+        lines.append("  /// [timeMs] Current time in milliseconds for timestamping received messages")
+        lines.append("  bool decodeFrame(Uint8List frame, int timeMs) {")
+        lines.append("    if (frame.isEmpty) return false;")
+        lines.append("")
+        lines.append("    // Check if this is a first frame")
+        lines.append("    if (frame[0] == bleSyncFirst) {")
+        lines.append("      // Reset state for new message")
+        lines.append("      _valid = false;")
+        lines.append("      _bytesReceived = 0;")
+        lines.append("")
+        lines.append("      // Verify minimum frame size for first frame")
+        lines.append("      if (frame.length < 4) return false;")
+        lines.append("")
+        lines.append("      // Extract header")
+        lines.append("      _expectedSize = frame[1];")
+        lines.append("      _msgId = frame[2];")
+        lines.append("")
+        lines.append("      // Calculate payload bytes in this frame")
+        lines.append("      final headerSize = 3;")
+        lines.append("      final payloadInFrame = frame.length - headerSize;")
+        lines.append("")
+        lines.append("      // Check if this frame has checksum (complete message)")
+        lines.append("      final hasChecksum = (payloadInFrame == _expectedSize + 1);")
+        lines.append("")
+        lines.append("      if (hasChecksum) {")
+        lines.append("        // Single-frame message - verify checksum")
+        lines.append("        final payloadData = frame.sublist(3, 3 + _expectedSize);")
+        lines.append("        final checksum = frame[3 + _expectedSize];")
+        lines.append("        final calcChecksum = _calculateChecksum(payloadData);")
+        lines.append("        if (checksum != calcChecksum) return false;")
+        lines.append("")
+        lines.append("        // Copy payload to buffer")
+        lines.append("        _payloadBuffer.setRange(0, _expectedSize, payloadData);")
+        lines.append("        _bytesReceived = _expectedSize;")
+        lines.append("        _valid = true;")
+        lines.append("        ")
+        lines.append("        // Store decoded message in per-message buffer")
+        lines.append("        _storeMessage(timeMs);")
+        lines.append("        return true;")
+        lines.append("      } else {")
+        lines.append("        // Multi-frame message - copy partial payload")
+        lines.append("        if (payloadInFrame > _expectedSize) return false;")
+        lines.append("        _payloadBuffer.setRange(0, payloadInFrame, frame.sublist(3));")
+        lines.append("        _bytesReceived = payloadInFrame;")
+        lines.append("        return false; // Need more frames")
+        lines.append("      }")
+        lines.append("    } else {")
+        lines.append("      // Continuation frame (no sync byte, just payload)")
+        lines.append("      if (_bytesReceived == 0) return false; // No first frame received")
+        lines.append("")
+        lines.append("      final remaining = _expectedSize - _bytesReceived;")
+        lines.append("      final hasChecksum = (frame.length == remaining + 1);")
+        lines.append("")
+        lines.append("      if (hasChecksum) {")
+        lines.append("        // Final frame - verify checksum")
+        lines.append("        _payloadBuffer.setRange(_bytesReceived, _bytesReceived + remaining, frame);")
+        lines.append("        _bytesReceived += remaining;")
+        lines.append("")
+        lines.append("        final checksum = frame[remaining];")
+        lines.append("        final payloadData = _payloadBuffer.sublist(0, _expectedSize);")
+        lines.append("        final calcChecksum = _calculateChecksum(payloadData);")
+        lines.append("        if (checksum != calcChecksum) {")
+        lines.append("          _bytesReceived = 0; // Reset on checksum failure")
+        lines.append("          return false;")
+        lines.append("        }")
+        lines.append("")
+        lines.append("        _valid = true;")
+        lines.append("        ")
+        lines.append("        // Store decoded message in per-message buffer")
+        lines.append("        _storeMessage(timeMs);")
+        lines.append("        return true;")
+        lines.append("      } else {")
+        lines.append("        // Continuation frame - copy payload")
+        lines.append("        if (frame.length > remaining) return false;")
+        lines.append("        _payloadBuffer.setRange(_bytesReceived, _bytesReceived + frame.length, frame);")
+        lines.append("        _bytesReceived += frame.length;")
+        lines.append("        return false; // Need more frames")
+        lines.append("      }")
+        lines.append("    }")
+        lines.append("  }")
+        lines.append("")
+        return lines
+
+    def _generate_store_message_method(self) -> List[str]:
+        """Generate helper method to store decoded message in per-message buffer"""
+        lines = []
+        lines.append("  /// Store decoded message in per-message buffer")
+        lines.append("  void _storeMessage(int timestampMs) {")
+        lines.append("    switch (_msgId) {")
+        for msg_name, msg_info in self.server_messages.items():
+            class_name = self.to_pascal_case(msg_name)
+            camel_name = self.to_camel_case(msg_name)
+            lines.append(f"      case {msg_info['id']}:")
+            lines.append(f"        _{camel_name} = _decode{class_name}FromBuffer();")
+            lines.append(f"        _{camel_name}TimestampMs = timestampMs;")
+            lines.append(f"        _{camel_name}Unread = true;")
+            lines.append(f"        break;")
+        lines.append("      default:")
+        lines.append("        break;")
+        lines.append("    }")
+        lines.append("  }")
+        lines.append("")
+        return lines
+
+    # ========================================================================
+    # Message Layer - Type handling and message-specific logic
+    # ========================================================================
 
     def get_dart_type(self, type_name: str) -> str:
         """Convert schema type to Dart type"""
@@ -112,11 +257,8 @@ class DartGenerator:
         lines.append("import 'dart:typed_data';")
         lines.append("")
 
-        # Constants
-        lines.append("// Protocol constants")
-        first_sync = next(f['value'] for f in self.frame['first']['fields'] if f['name'] == 'sync')
-        lines.append(f"const int bleSyncFirst = {first_sync};")
-        lines.append("")
+        # Protocol constants (from protocol layer)
+        lines.extend(self._get_protocol_constants())
 
         # Message IDs
         lines.append("// Message IDs")
@@ -264,107 +406,9 @@ class DartGenerator:
             lines.append(f"  bool _{camel_name}Unread = false;")
         lines.append("")
 
-        lines.append("  /// Decode a frame (supports multi-frame reassembly)")
-        lines.append("  /// Returns true when a complete message is received and validated")
-        lines.append("  /// [timeMs] Current time in milliseconds for timestamping received messages")
-        lines.append("  bool decodeFrame(Uint8List frame, int timeMs) {")
-        lines.append("    if (frame.isEmpty) return false;")
-        lines.append("")
-        lines.append("    // Check if this is a first frame")
-        lines.append("    if (frame[0] == bleSyncFirst) {")
-        lines.append("      // Reset state for new message")
-        lines.append("      _valid = false;")
-        lines.append("      _bytesReceived = 0;")
-        lines.append("")
-        lines.append("      // Verify minimum frame size for first frame")
-        lines.append("      if (frame.length < 4) return false;")
-        lines.append("")
-        lines.append("      // Extract header")
-        lines.append("      _expectedSize = frame[1];")
-        lines.append("      _msgId = frame[2];")
-        lines.append("")
-        lines.append("      // Calculate payload bytes in this frame")
-        lines.append("      final headerSize = 3;")
-        lines.append("      final payloadInFrame = frame.length - headerSize;")
-        lines.append("")
-        lines.append("      // Check if this frame has checksum (complete message)")
-        lines.append("      final hasChecksum = (payloadInFrame == _expectedSize + 1);")
-        lines.append("")
-        lines.append("      if (hasChecksum) {")
-        lines.append("        // Single-frame message - verify checksum")
-        lines.append("        final payloadData = frame.sublist(3, 3 + _expectedSize);")
-        lines.append("        final checksum = frame[3 + _expectedSize];")
-        lines.append("        final calcChecksum = _calculateChecksum(payloadData);")
-        lines.append("        if (checksum != calcChecksum) return false;")
-        lines.append("")
-        lines.append("        // Copy payload to buffer")
-        lines.append("        _payloadBuffer.setRange(0, _expectedSize, payloadData);")
-        lines.append("        _bytesReceived = _expectedSize;")
-        lines.append("        _valid = true;")
-        lines.append("        ")
-        lines.append("        // Store decoded message in per-message buffer")
-        lines.append("        _storeMessage(timeMs);")
-        lines.append("        return true;")
-        lines.append("      } else {")
-        lines.append("        // Multi-frame message - copy partial payload")
-        lines.append("        if (payloadInFrame > _expectedSize) return false;")
-        lines.append("        _payloadBuffer.setRange(0, payloadInFrame, frame.sublist(3));")
-        lines.append("        _bytesReceived = payloadInFrame;")
-        lines.append("        return false; // Need more frames")
-        lines.append("      }")
-        lines.append("    } else {")
-        lines.append("      // Continuation frame (no sync byte, just payload)")
-        lines.append("      if (_bytesReceived == 0) return false; // No first frame received")
-        lines.append("")
-        lines.append("      final remaining = _expectedSize - _bytesReceived;")
-        lines.append("      final hasChecksum = (frame.length == remaining + 1);")
-        lines.append("")
-        lines.append("      if (hasChecksum) {")
-        lines.append("        // Final frame - verify checksum")
-        lines.append("        _payloadBuffer.setRange(_bytesReceived, _bytesReceived + remaining, frame);")
-        lines.append("        _bytesReceived += remaining;")
-        lines.append("")
-        lines.append("        final checksum = frame[remaining];")
-        lines.append("        final payloadData = _payloadBuffer.sublist(0, _expectedSize);")
-        lines.append("        final calcChecksum = _calculateChecksum(payloadData);")
-        lines.append("        if (checksum != calcChecksum) {")
-        lines.append("          _bytesReceived = 0; // Reset on checksum failure")
-        lines.append("          return false;")
-        lines.append("        }")
-        lines.append("")
-        lines.append("        _valid = true;")
-        lines.append("        ")
-        lines.append("        // Store decoded message in per-message buffer")
-        lines.append("        _storeMessage(timeMs);")
-        lines.append("        return true;")
-        lines.append("      } else {")
-        lines.append("        // Continuation frame - copy payload")
-        lines.append("        if (frame.length > remaining) return false;")
-        lines.append("        _payloadBuffer.setRange(_bytesReceived, _bytesReceived + frame.length, frame);")
-        lines.append("        _bytesReceived += frame.length;")
-        lines.append("        return false; // Need more frames")
-        lines.append("      }")
-        lines.append("    }")
-        lines.append("  }")
-        lines.append("")
-
-        # Store message helper
-        lines.append("  /// Store decoded message in per-message buffer")
-        lines.append("  void _storeMessage(int timestampMs) {")
-        lines.append("    switch (_msgId) {")
-        for msg_name, msg_info in self.server_messages.items():
-            class_name = self.to_pascal_case(msg_name)
-            camel_name = self.to_camel_case(msg_name)
-            lines.append(f"      case {msg_info['id']}:")
-            lines.append(f"        _{camel_name} = _decode{class_name}FromBuffer();")
-            lines.append(f"        _{camel_name}TimestampMs = timestampMs;")
-            lines.append(f"        _{camel_name}Unread = true;")
-            lines.append(f"        break;")
-        lines.append("      default:")
-        lines.append("        break;")
-        lines.append("    }")
-        lines.append("  }")
-        lines.append("")
+        # Protocol layer decode methods
+        lines.extend(self._generate_decode_frame_method())
+        lines.extend(self._generate_store_message_method())
 
         # Add internal decode methods (from buffer)
         for msg_name, msg_info in self.server_messages.items():
@@ -498,19 +542,12 @@ class DartGenerator:
             lines.append("}")
             lines.append("")
 
-        # Checksum helper
+        # Protocol layer helper functions
         lines.append("// ============================================================================")
-        lines.append("// Private helper functions")
+        lines.append("// Protocol layer helper functions")
         lines.append("// ============================================================================")
         lines.append("")
-        lines.append("// Calculate sum-mod-256 checksum")
-        lines.append("int _calculateChecksum(Uint8List data) {")
-        lines.append("  int sum = 0;")
-        lines.append("  for (var byte in data) {")
-        lines.append("    sum += byte;")
-        lines.append("  }")
-        lines.append("  return sum & 0xFF;")
-        lines.append("}")
+        lines.extend(self._generate_checksum_function())
 
         return '\n'.join(lines)
 
@@ -533,12 +570,21 @@ class DartGenerator:
         return '\n'.join(lines)
 
 
-def generate_dart_code(schema_path: str, output_dir: str = '.'):
-    """Main function to generate Dart code"""
-    with open(schema_path, 'r') as f:
-        schema = json.load(f)
+def generate_dart_code(protocol_schema_path: str, messages_schema_path: str, output_dir: str = '.'):
+    """Main function to generate Dart code
 
-    generator = DartGenerator(schema)
+    Args:
+        protocol_schema_path: Path to protocol.json (frame format, types)
+        messages_schema_path: Path to messages.json (message definitions)
+        output_dir: Output directory for generated files
+    """
+    with open(protocol_schema_path, 'r') as f:
+        protocol_schema = json.load(f)
+
+    with open(messages_schema_path, 'r') as f:
+        messages_schema = json.load(f)
+
+    generator = DartGenerator(protocol_schema, messages_schema)
 
     # Generate messages
     messages_content = generator.generate_messages()
@@ -557,6 +603,7 @@ def generate_dart_code(schema_path: str, output_dir: str = '.'):
 
 if __name__ == '__main__':
     import sys
-    schema_path = sys.argv[1] if len(sys.argv) > 1 else 'schema/schema.json'
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else 'generated/dart'
-    generate_dart_code(schema_path, output_dir)
+    protocol_path = sys.argv[1] if len(sys.argv) > 1 else 'schema/protocol.json'
+    messages_path = sys.argv[2] if len(sys.argv) > 2 else 'schema/messages.json'
+    output_dir = sys.argv[3] if len(sys.argv) > 3 else 'generated/dart'
+    generate_dart_code(protocol_path, messages_path, output_dir)
